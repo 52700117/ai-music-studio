@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+  line-height: 1.6;
+  font-weight: 400;
+  color: #1a1a1a;
+  background: #ffffff;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #ffffff;
+}
+
+/* 纸感纹理底纹 */
+.bg-paper-grain {
+  background-color: #fafaf7;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(26, 26, 26, 0.025) 1px, transparent 0);
+  background-size: 22px 22px;
+}
+
+/* 衬线标题样式 */
+.font-display {
+  font-family: 'Fraunces', Georgia, serif;
+  font-optical-sizing: auto;
+  letter-spacing: -0.02em;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #e8e6e1;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #d1cec6;
+  background-clip: content-box;
+}
+
+/* 选区颜色 */
+::selection {
+  background: #ff4d2e;
+  color: #fff;
+}
+
+/* 输入框聚焦环 */
+.focus-coral:focus {
+  outline: none;
+  border-color: #ff4d2e;
+  box-shadow: 0 0 0 3px rgba(255, 77, 46, 0.15);
+}
+
+/* 渐隐底部分隔 */
+.fade-bottom {
+  -webkit-mask-image: linear-gradient(to bottom, #000 80%, transparent);
+  mask-image: linear-gradient(to bottom, #000 80%, transparent);
+}
+
+/* 代码编辑器等宽 */
+.font-mono-code {
+  font-family: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Menlo, Consolas, monospace;
+}
