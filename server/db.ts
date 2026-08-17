@@ -162,6 +162,15 @@ export async function ensureInitialized(): Promise<void> {
   await runMigrations()
   await ensureColumn('user', 'paused', 'INTEGER DEFAULT 0')
   await ensureColumn('creation', 'audio_url', 'TEXT')
+  // 用户名密码登录
+  await ensureColumn('user', 'username', 'TEXT')
+  await ensureColumn('user', 'password_hash', 'TEXT')
+  await ensureColumn('user', 'password_updated_at', 'TEXT')
+  try {
+    await db.execute(`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_username ON user(username) WHERE username IS NOT NULL`)
+  } catch {
+    /* index may already exist */
+  }
 }
 
 // 本地开发：立即触发初始化（异步，不阻塞模块加载）

@@ -52,3 +52,28 @@ export function maskNickname(name: string): string {
   if (name.length <= 2) return name[0] + '*'
   return name[0] + '*'.repeat(name.length - 2) + name[name.length - 1]
 }
+
+/**
+ * 密码哈希：PBKDF2 + 盐
+ * 返回格式：salt:iterations:hash（都是 hex）
+ */
+export function hashPassword(password: string): string {
+  const salt = crypto.randomBytes(16).toString('hex')
+  const iterations = 100000
+  const hash = crypto.pbkdf2Sync(password, salt, iterations, 64, 'sha512').toString('hex')
+  return `${salt}:${iterations}:${hash}`
+}
+
+/**
+ * 验证密码
+ */
+export function verifyPassword(password: string, stored: string): boolean {
+  if (!stored) return false
+  const [salt, iterStr, hash] = stored.split(':')
+  if (!salt || !iterStr || !hash) return false
+  const iterations = parseInt(iterStr, 10)
+  const testHash = crypto.pbkdf2Sync(password, salt, iterations, 64, 'sha512').toString('hex')
+  // 时间安全比较
+  if (testHash.length !== hash.length) return false
+  return crypto.timingSafeEqual(Buffer.from(testHash), Buffer.from(hash))
+}

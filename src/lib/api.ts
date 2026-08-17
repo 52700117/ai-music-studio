@@ -86,6 +86,7 @@ async function request<T>(path: string, opts: ReqOpts = {}): Promise<T> {
 export interface UserInfo {
   id: number
   nickname: string
+  username?: string
   phoneMasked?: string
   wechatMasked?: string
   loginType: string
@@ -116,8 +117,15 @@ export interface PlazaSong {
 export const api = {
   status: () => request<{ success: boolean; active: boolean }>('/api/status', { auth: 'none' }),
 
-  login: (body: { type: 'wechat' | 'phone'; phone?: string; code?: string; nickname?: string }) =>
+  login: (body: { type?: 'wechat' | 'phone' | 'password'; username?: string; password?: string; phone?: string; code?: string; nickname?: string }) =>
     request<{ success: boolean; token: string; user: UserInfo }>('/api/auth/login', {
+      method: 'POST',
+      body,
+      auth: 'none',
+    }),
+
+  register: (body: { username: string; password: string; nickname?: string }) =>
+    request<{ success: boolean; token: string; user: UserInfo }>('/api/auth/register', {
       method: 'POST',
       body,
       auth: 'none',
@@ -131,6 +139,7 @@ export const api = {
     voice?: string
     sourceSongId?: number
     audioName?: string
+    durationSec?: number
   }) => request<{ success: boolean; id: number; status: string; title: string }>('/api/creations', {
     method: 'POST',
     body,

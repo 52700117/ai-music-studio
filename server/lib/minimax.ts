@@ -1,15 +1,12 @@
 /**
  * MiniMax Music Generation API 接入
- * - 国内可访问、免费额度、支持高保真人声
- * - 文档：https://platform.minimaxi.com
- * - 同步返回：data.audio (URL 或 hex)，data.status: 1=生成中, 2=完成
+ * - music-3.0-free：免费版，RPM=3，模型质量与 music-3.0 相同
+ * - 文档：https://platform.minimaxi.com/docs/api-reference/music-generation
  *
  * 环境变量：MINIMAX_API_KEY
  */
-import crypto from 'crypto'
 
 const MINIMAX_API_KEY = process.env.MINIMAX_API_KEY || ''
-// 国内平台用 api.minimaxi.com，国际平台用 api.minimax.io
 const BASE = process.env.MINIMAX_BASE || 'https://api.minimaxi.com/v1'
 
 export function isMiniMaxEnabled(): boolean {
@@ -19,9 +16,11 @@ export function isMiniMaxEnabled(): boolean {
 interface GenerateOptions {
   prompt: string
   lyrics?: string
+  aiLyricsReq?: string
   voice?: 'male' | 'female'
   mode?: 'original' | 'lyrics' | 'pure' | 'remix'
   creationId: number
+  durationSec?: number
 }
 
 interface MiniMaxResult {
@@ -30,55 +29,52 @@ interface MiniMaxResult {
 }
 
 /**
- * 构造请求体
- * music-2.5 模型说明：
- * - lyrics 必填（1-3500 字符），可使用 [Verse]/[Chorus]/[Bridge] 等段落标签
- * - 如需纯音乐，lyrics 用 "[Intro]\n[Outro]" 并在 prompt 加 "pure music, no lyrics"
- * - lyrics_optimizer=true 可根据 prompt 自动生成歌词
+ * 构造 music-3.0-free 请求体
+ * - 纯音乐：is_instrumental=true，无需 lyrics
+ * - AI 写词：lyrics_optimizer=true，AI 根据 prompt+要求 自动生成歌词
+ * - 普通模式：直接使用用户提供的 lyrics
  */
 function buildRequestBody(opts: GenerateOptions): any {
-  const { prompt, lyrics, voice, mode } = opts
+  const { prompt, lyrics, aiLyricsReq, voice, mode, durationSec } = opts
 
   const isInstrumental = mode === 'pure'
   const hasLyrics = !!lyrics?.trim()
+  const hasAiReq = !!aiLyricsReq?.trim()
 
-  // prompt 拼接：用户输入 + 风格提示
-  let fullPrompt = prompt.slice(0, 1500)
+  let fullPrompt = prompt.slice(0, 2000)
   if (voice === 'male') fullPrompt += ', male vocal'
   else if (voice === 'female') fullPrompt += ', female vocal'
 
   if (isInstrumental) {
-    fullPrompt += ', pure music, no lyrics, instrumental'
+    fullPrompt += ', pure music, instrumental, no vocals'
   }
 
-  // lyrics 处理
-  let finalLyrics: string
-  let lyricsOptimizer = false
-
-  if (isInstrumental) {
-    // 纯音乐：用占位段落标签
-    finalLyrics = '[Intro]\n[Outro]'
-  } else if (hasLyrics) {
-    // 用户提供了歌词
-    finalLyrics = lyrics!.slice(0, 3500)
-  } else {
-    // 没提供歌词：让 MiniMax 根据 prompt 自动生成
-    finalLyrics = '[Verse]\n[Chorus]'
-    lyricsOptimizer = true
+  if (hasAiReq) {
+    fullPrompt += `. Lyrics theme: ${aiLyricsReq!.slice(0, 500)}`
   }
 
-  return {
-    model: 'music-2.5',
+  const body: any = {
+    model: 'music-3.0-free',
     prompt: fullPrompt,
-    lyrics: finalLyrics,
-    lyrics_optimizer: lyricsOptimizer,
-    output_format: 'url', // 直接返回 URL，不用解码 hex
+    output_format: 'url',
     audio_setting: {
       sample_rate: 44100,
       bitrate: 256000,
       format: 'mp3',
     },
+    duration: Math.max(10, Math.min(300, durationSec || 60)),
   }
+
+  if (isInstrumental) {
+    body.is_instrumental = true
+  } else if (hasLyrics) {
+    body.lyrics = lyrics!.slice(0, 3500)
+  } else {
+    body.lyrics_optimizer = true
+    body.lyrics = ''
+  }
+
+  return body
 }
 
 /**

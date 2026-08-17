@@ -30,6 +30,11 @@ export default function Editor() {
   const [dragFile, setDragFile] = useState<File | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [lyricsText, setLyricsText] = useState('')
+  // 歌词模式：self=自己写词，ai=AI帮写歌词
+  const [lyricsMode, setLyricsMode] = useState<'self' | 'ai'>('self')
+  const [aiLyricsReq, setAiLyricsReq] = useState('')
+  // 音乐时长（秒）
+  const [duration, setDuration] = useState(60)
 
   const [generating, setGenerating] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -65,7 +70,7 @@ export default function Editor() {
       return
     }
     // 原创音乐需要歌词或创作要求；改编音乐和纯音乐不强制要求顶部输入
-    if (mode === 'original' && !prompt.trim() && !lyricsText.trim()) {
+    if (mode === 'original' && !prompt.trim() && !lyricsText.trim() && !(lyricsMode === 'ai' && aiLyricsReq.trim())) {
       alert('请填写创作要求或放入歌词')
       return
     }
@@ -76,9 +81,18 @@ export default function Editor() {
 
     const apiMode = remixSource ? 'remix' : mode
     // 合并创作要求和歌词
-    const combinedPrompt = [prompt.trim(), lyricsText.trim() && `歌词：\n${lyricsText.trim()}`]
-      .filter(Boolean)
-      .join('\n\n') || undefined
+    // - 自己写词模式：拼接用户歌词
+    // - AI帮写模式：把 AI 写词要求作为单独段落，由后端传递给 MiniMax lyrics_optimizer
+    let combinedPrompt: string | undefined
+    if (lyricsMode === 'ai' && mode === 'original') {
+      combinedPrompt = [prompt.trim(), aiLyricsReq.trim() && `[AI写词要求]\n${aiLyricsReq.trim()}`]
+        .filter(Boolean)
+        .join('\n\n') || undefined
+    } else {
+      combinedPrompt = [prompt.trim(), lyricsText.trim() && `歌词：\n${lyricsText.trim()}`]
+        .filter(Boolean)
+        .join('\n\n') || undefined
+    }
     try {
       const r = await api.createCreation({
         mode: apiMode,
@@ -86,9 +100,16 @@ export default function Editor() {
         voice: mode === 'lyrics' ? voice : undefined,
         sourceSongId: remixSource?.id,
         audioName: dragFile?.name?.replace(/\.mp3$/i, '') || undefined,
+        durationSec: duration,
       })
       setCreationId(r.id)
-      const seed: AudioSeed = { mode: apiMode as AudioSeed['mode'], voice: (mode === 'lyrics' || mode === 'original') ? voice : undefined, prompt: combinedPrompt, lyrics: lyricsText.trim() || undefined }
+      const seed: AudioSeed = {
+        mode: apiMode as AudioSeed['mode'],
+        voice: (mode === 'lyrics' || mode === 'original') ? voice : undefined,
+        prompt: combinedPrompt,
+        lyrics: lyricsMode === 'ai' ? (aiLyricsReq.trim() || prompt.trim()) : (lyricsText.trim() || undefined),
+        durationSec: duration,
+      }
       // 轮询进度
       pollRef.current = window.setInterval(async () => {
         try {
@@ -200,28 +221,85 @@ export default function Editor() {
           </div>
         )}
 
-        {/* 正方形区域：根据模式切换 */}
-        <div className="mt-7">
-          {/* 原创音乐：放入歌词 */}
-          {mode === 'original' && (
-            <>
-              <label className="block mb-2 text-sm font-semibold text-ink">放入歌词</label>
-              <div
+        {/* 音乐时长选择 */}
+        <div className="mt-5">
+          <label className="block mb-2 text-sm font-semibold text-ink">音乐时长</label>
+          <div className="inline-flex p-1 rounded-full bg-cream border border-line">
+            {([60, 120, 150, 180, 210] as const).map((d) => (
+              <button
+                key={d}
+                onClick={() => setDuration(d)}
                 className={cn(
-                  'aspect-square max-w-[280px] rounded-2xl border flex flex-col transition-all border-coral bg-coral-50/40',
+                  'px-3 py-2 rounded-full text-sm font-medium transition-all',
+                  duration === d ? 'bg-ink text-paper' : 'text-muted hover:text-ink',
                 )}
               >
-                <div className="flex items-center gap-2 px-4 py-3 border-b border-line/60">
-                  <AlignLeft size={16} className="text-coral" />
-                  <span className="text-sm font-medium text-ink">歌词内容</span>
+                {d}秒
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 正方形区域：根据模式切换 */}
+        <div className="mt-7">
+          {/* 原创音乐：歌词区 */}
+          {mode === 'original' && (
+            <>
+              {/* 歌词模式切换 */}
+              <div className="flex items-center gap-2 mb-3">
+                <label className="text-sm font-semibold text-ink mr-2">歌词来源</label>
+                <div className="inline-flex p-1 rounded-full bg-cream border border-line">
+                  <button
+                    onClick={() => setLyricsMode('self')}
+                    className={cn(
+                      'px-4 py-1.5 rounded-full text-xs font-medium transition-all',
+                      lyricsMode === 'self' ? 'bg-ink text-paper' : 'text-muted hover:text-ink',
+                    )}
+                  >
+                    自己写词
+                  </button>
+                  <button
+                    onClick={() => setLyricsMode('ai')}
+                    className={cn(
+                      'px-4 py-1.5 rounded-full text-xs font-medium transition-all',
+                      lyricsMode === 'ai' ? 'bg-ink text-paper' : 'text-muted hover:text-ink',
+                    )}
+                  >
+                    AI帮写歌词
+                  </button>
                 </div>
-                <textarea
-                  value={lyricsText}
-                  onChange={(e) => setLyricsText(e.target.value)}
-                  placeholder="在此粘贴或输入你的歌词..."
-                  className="flex-1 w-full p-4 bg-transparent resize-none text-sm leading-relaxed placeholder:text-muted/50 focus:outline-none"
-                />
               </div>
+
+              {/* 自己写词：歌词输入框（AI帮写时不显示） */}
+              {lyricsMode === 'self' && (
+                <div className="aspect-square max-w-[280px] rounded-2xl border border-coral bg-coral-50/40 flex flex-col">
+                  <div className="flex items-center gap-2 px-4 py-3 border-b border-line/60">
+                    <AlignLeft size={16} className="text-coral" />
+                    <span className="text-sm font-medium text-ink">歌词内容</span>
+                  </div>
+                  <textarea
+                    value={lyricsText}
+                    onChange={(e) => setLyricsText(e.target.value)}
+                    placeholder="在此粘贴或输入你的歌词..."
+                    className="flex-1 w-full p-4 bg-transparent resize-none text-sm leading-relaxed placeholder:text-muted/50 focus:outline-none"
+                  />
+                </div>
+              )}
+
+              {/* AI帮写：写词要求输入框 */}
+              {lyricsMode === 'ai' && (
+                <div className="mt-3 max-w-[280px]">
+                  <label className="block mb-2 text-xs font-medium text-muted">AI 写词要求（可选）</label>
+                  <textarea
+                    value={aiLyricsReq}
+                    onChange={(e) => setAiLyricsReq(e.target.value)}
+                    placeholder="描述歌词主题、风格、情绪，如：写一首关于夏夜海边的民谣，温暖怀旧"
+                    rows={3}
+                    className="focus-coral w-full rounded-2xl border border-coral bg-coral-50/40 p-3 text-sm leading-relaxed resize-none placeholder:text-muted/50"
+                  />
+                  <p className="mt-1.5 text-[11px] text-muted">AI 会根据你的要求自动创作歌词并演唱</p>
+                </div>
+              )}
             </>
           )}
 
@@ -269,49 +347,7 @@ export default function Editor() {
             </>
           )}
 
-          {/* 纯音乐：放入MP3音频 */}
-          {mode === 'pure' && (
-            <>
-              <label className="block mb-2 text-sm font-semibold text-ink">放入MP3音频</label>
-              <div
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={onDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={cn(
-                  'aspect-square max-w-[220px] rounded-2xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all',
-                  dragOver ? 'border-coral bg-coral-50 scale-[1.02]' : 'border-line bg-cream/40 hover:border-coral/50 hover:bg-cream',
-                )}
-              >
-                {dragFile ? (
-                  <div className="text-center px-3">
-                    <FileMusic size={28} className="text-coral mx-auto mb-2" />
-                    <div className="text-sm font-medium text-ink truncate">{dragFile.name}</div>
-                    <div className="text-[11px] text-muted mt-1">{(dragFile.size / 1024).toFixed(0)} KB</div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setDragFile(null) }}
-                      className="mt-2 text-xs text-muted hover:text-danger"
-                    >
-                      移除
-                    </button>
-                  </div>
-                ) : (
-                  <div className="text-center px-4">
-                    <Upload size={26} className="text-muted mx-auto mb-2" />
-                    <div className="text-sm font-medium text-ink">拖入 MP3</div>
-                    <div className="text-[11px] text-muted mt-1">或点击选择文件</div>
-                  </div>
-                )}
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".mp3,audio/mpeg,audio/mp3"
-                className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) setDragFile(f) }}
-              />
-            </>
-          )}
+          {/* 纯音乐：无额外组件 */}
         </div>
 
         {/* 制作按钮 */}
@@ -327,21 +363,22 @@ export default function Editor() {
           )}
         </div>
 
-        {/* 进度 */}
-        {generating && (
-          <div className="mt-8 p-6 rounded-2xl bg-cream border border-line animate-slide-up">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-9 h-9 rounded-xl bg-coral/15 flex items-center justify-center">
-                <Music2 className="text-coral animate-pulse" size={18} />
+        {/* 进度条弹窗：generating 时自动弹出 */}
+        <Modal open={generating} onClose={() => {}} size="sm" hideClose closeOnBackdrop={false}>
+          <div className="p-7">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-xl bg-coral/15 flex items-center justify-center">
+                <Music2 className="text-coral animate-pulse" size={20} />
               </div>
               <div>
-                <div className="font-semibold text-sm">正在生成你的音乐…</div>
-                <div className="text-xs text-muted">AI 正在谱曲、编排与混音</div>
+                <div className="font-semibold text-base">正在生成你的音乐…</div>
+                <div className="text-xs text-muted mt-0.5">AI 正在谱曲、编排与混音</div>
               </div>
             </div>
             <ProgressBar progress={progress} />
+            <p className="mt-4 text-center text-xs text-muted">请耐心等待，通常需要 30-90 秒</p>
           </div>
-        )}
+        </Modal>
       </div>
 
       {/* 完成弹窗 */}
@@ -373,25 +410,37 @@ export default function Editor() {
 }
 
 /**
- * 未登录提示
+ * 未登录提示：账号密码登录 / 注册
  */
 function LoginPrompt({ open, onClose, onSuccess, nav }: { open: boolean; onClose: () => void; onSuccess: () => void; nav: (p: string) => void }) {
-  const [type, setType] = useState<'phone' | 'wechat'>('phone')
-  const [phone, setPhone] = useState('')
-  const [code, setCode] = useState('')
+  const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [nickname, setNickname] = useState('')
   const [loading, setLoading] = useState(false)
 
   const submit = async () => {
+    if (!username.trim()) {
+      alert('请输入用户名')
+      return
+    }
+    if (!password) {
+      alert('请输入密码')
+      return
+    }
     setLoading(true)
     try {
-      const r = await api.login({ type, phone: phone || undefined, code: code || '1234', nickname: '微信用户' })
+      const r = mode === 'register'
+        ? await api.register({ username: username.trim(), password, nickname: nickname.trim() || undefined })
+        : await api.login({ username: username.trim(), password })
       setUserToken(r.token)
       await useStore.getState().loadUser()
       onSuccess()
-      setPhone('')
-      setCode('')
+      setUsername('')
+      setPassword('')
+      setNickname('')
     } catch (e: any) {
-      alert(e.message || '登录失败')
+      alert(e.message || '操作失败')
     } finally {
       setLoading(false)
     }
@@ -403,43 +452,59 @@ function LoginPrompt({ open, onClose, onSuccess, nav }: { open: boolean; onClose
         <h3 className="font-display text-2xl font-semibold">登录后开始创作</h3>
         <p className="mt-1 text-sm text-muted">登录后作品会保存在「我的创作」里</p>
 
-        <div className="mt-5 inline-flex p-1 rounded-full bg-cream border border-line">
-          <button onClick={() => setType('phone')} className={cn('px-4 py-1.5 rounded-full text-sm font-medium', type === 'phone' ? 'bg-ink text-paper' : 'text-muted')}>手机号</button>
-          <button onClick={() => setType('wechat')} className={cn('px-4 py-1.5 rounded-full text-sm font-medium', type === 'wechat' ? 'bg-ink text-paper' : 'text-muted')}>微信</button>
+        <div className="mt-5 inline-flex p-1 rounded-full bg-cream border border-line w-full">
+          <button
+            onClick={() => setMode('login')}
+            className={cn('flex-1 py-1.5 rounded-full text-sm font-medium', mode === 'login' ? 'bg-ink text-paper' : 'text-muted')}
+          >
+            登录
+          </button>
+          <button
+            onClick={() => setMode('register')}
+            className={cn('flex-1 py-1.5 rounded-full text-sm font-medium', mode === 'register' ? 'bg-ink text-paper' : 'text-muted')}
+          >
+            注册新账号
+          </button>
         </div>
 
-        {type === 'phone' ? (
-          <div className="mt-4 space-y-3">
+        <div className="mt-4 space-y-3">
+          <div>
+            <label className="block mb-1.5 text-xs text-muted">用户名</label>
             <input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
-              placeholder="请输入手机号"
+              value={username}
+              onChange={(e) => setUsername(e.target.value.replace(/[^\w]/g, '').slice(0, 20))}
+              placeholder="3-20 位，字母开头"
               className="focus-coral w-full rounded-xl border border-line bg-cream/40 px-4 py-3 text-sm"
             />
-            <div className="flex gap-2">
-              <input
-                value={code}
-                onChange={(e) => setCode(e.target.value.slice(0, 6))}
-                placeholder="验证码（演示填任意）"
-                className="focus-coral flex-1 rounded-xl border border-line bg-cream/40 px-4 py-3 text-sm"
-              />
-              <Button variant="outline" size="md" onClick={() => setCode('1234')}>获取</Button>
-            </div>
           </div>
-        ) : (
-          <div className="mt-4">
-            <Button variant="wechat" size="lg" block loading={loading} onClick={submit}>
-              <Play size={16} /> 微信一键登录
-            </Button>
-            <p className="mt-2 text-center text-xs text-muted">演示环境将模拟微信授权</p>
-          </div>
-        )}
 
-        {type === 'phone' && (
-          <div className="mt-4">
-            <Button variant="primary" size="lg" block loading={loading} onClick={submit}>登录</Button>
+          {mode === 'register' && (
+            <div>
+              <label className="block mb-1.5 text-xs text-muted">昵称（可选）</label>
+              <input
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value.slice(0, 30))}
+                placeholder="不填则默认用用户名"
+                className="focus-coral w-full rounded-xl border border-line bg-cream/40 px-4 py-3 text-sm"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block mb-1.5 text-xs text-muted">密码</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value.slice(0, 64))}
+              placeholder="6-64 位，含字母和数字"
+              className="focus-coral w-full rounded-xl border border-line bg-cream/40 px-4 py-3 text-sm"
+            />
           </div>
-        )}
+
+          <Button variant="primary" size="lg" block loading={loading} onClick={submit}>
+            {mode === 'register' ? '注册并登录' : '登录'}
+          </Button>
+        </div>
 
         <button onClick={() => { onClose(); nav('/profile') }} className="mt-4 w-full text-center text-xs text-muted hover:text-ink">
           前往个人中心登录 →

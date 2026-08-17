@@ -30,8 +30,8 @@ export default function Plaza() {
       return
     }
     stopRef.current?.()
-    const seed: AudioSeed = { mode: 'original', voice: 'female' }
-    stopRef.current = playGenerated(seed, song.title + song.author, 30)
+    const seed: AudioSeed = { mode: 'original', voice: 'female', prompt: song.title, durationSec: 60 }
+    stopRef.current = playGenerated(seed, song.title + song.author)
     setPlayingId(song.id)
     try {
       await api.plazaPlay(song.id)
@@ -42,7 +42,7 @@ export default function Plaza() {
       stopRef.current?.()
       stopRef.current = null
       setPlayingId((p) => (p === song.id ? null : p))
-    }, 30000)
+    }, 60000)
   }
 
   const remix = async (song: PlazaSong) => {

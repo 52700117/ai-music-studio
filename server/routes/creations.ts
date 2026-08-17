@@ -23,6 +23,7 @@ interface CreateBody {
   voice?: 'male' | 'female'
   sourceSongId?: number
   audioName?: string
+  durationSec?: number
 }
 
 const TITLES = ['无题', '灵感片段', '深夜曲', '清晨谣', '随想', '光与影', '回响', '微光']
@@ -40,7 +41,7 @@ const DURATION_MS = AI_ENABLED ? 180000 : 6000
 router.post('/', requireUser, async (req: Request, res: Response): Promise<void> => {
   await ensureInitialized()
   const userId = (req as any).user.id
-  const { mode, prompt, voice, sourceSongId, audioName } = (req.body || {}) as CreateBody
+  const { mode, prompt, voice, sourceSongId, audioName, durationSec } = (req.body || {}) as CreateBody
 
   if (!['original', 'lyrics', 'pure', 'remix'].includes(mode)) {
     res.status(400).json({ success: false, error: '无效的创作模式' })
@@ -62,15 +63,30 @@ router.post('/', requireUser, async (req: Request, res: Response): Promise<void>
 
   // 如启用 AI 生成，异步触发（不等待，避免 HTTP 超时）
   if (AI_ENABLED) {
-    // 从 prompt 里提取歌词（Editor 合并时加了 "歌词：\n" 前缀）
+    // 从 prompt 里提取歌词或 AI 写词要求（Editor 合并时加了前缀）
     let lyrics: string | undefined
+    let aiLyricsReq: string | undefined
     let cleanPrompt = prompt || title
+
+    // 1) 自己写词模式：提取 "歌词：\n..."
     const lyricsMatch = prompt?.match(/歌词：\n([\s\S]*?)$/)
     if (lyricsMatch) {
       lyrics = lyricsMatch[1].trim()
       cleanPrompt = prompt!.replace(/\n\n歌词：\n[\s\S]*?$/, '').trim() || title
     }
-    triggerGeneration(creationId, mode, cleanPrompt, voice, lyrics)
+
+    // 2) AI帮写模式：提取 "[AI写词要求]\n..."
+    const aiReqMatch = prompt?.match(/\[AI写词要求\]\n([\s\S]*?)$/)
+    if (aiReqMatch) {
+      aiLyricsReq = aiReqMatch[1].trim()
+      cleanPrompt = prompt!.replace(/\n\n\[AI写词要求\]\n[\s\S]*?$/, '').trim() || title
+      // 把 AI 写词要求拼到 prompt，让模型参考
+      if (aiLyricsReq) {
+        cleanPrompt = `${cleanPrompt}\n\n歌词主题要求：${aiLyricsReq}`
+      }
+    }
+
+    triggerGeneration(creationId, mode, cleanPrompt, voice, lyrics, aiLyricsReq, durationSec || 60)
   }
 
   res.json({ success: true, id: Number(creationId), status: 'processing', title })
@@ -79,6 +95,7 @@ router.post('/', requireUser, async (req: Request, res: Response): Promise<void>
 /**
  * 异步生成音乐：优先 MiniMax（国内免费+人声）→ MusicGen（HF 免费）→ Suno（收费）
  * 都失败则保持 audio_url=null，前端用本地合成器降级播放
+ * @param aiLyricsReq AI帮写歌词时的写词要求（如果有，让 MiniMax lyrics_optimizer 自动写词）
  */
 async function triggerGeneration(
   creationId: number,
@@ -86,6 +103,8 @@ async function triggerGeneration(
   prompt: string,
   voice?: string,
   lyrics?: string,
+  aiLyricsReq?: string,
+  durationSec: number = 60,
 ): Promise<void> {
   const voiceHint = voice === 'male' ? 'male vocal' : voice === 'female' ? 'female vocal' : ''
   const modeHint =
@@ -100,9 +119,11 @@ async function triggerGeneration(
       const result = await generateMusicWithMiniMax({
         prompt: fullPrompt,
         lyrics,
+        aiLyricsReq,
         voice: voice as 'male' | 'female' | undefined,
         mode: mode as 'original' | 'lyrics' | 'pure' | 'remix',
         creationId,
+        durationSec,
       })
       await db.execute({
         sql: 'UPDATE creation SET audio_url = ?, status = ? WHERE id = ?',

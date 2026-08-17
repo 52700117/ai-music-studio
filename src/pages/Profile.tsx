@@ -1,10 +1,11 @@
 /**
  * 个人中心：微信/手机登录 / 我的创作 / 建议反馈
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   User, Phone, MessageSquare, Music2, Send, LogOut, Check, Lightbulb, Hash,
+  Download, Share2, Play,
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
@@ -63,6 +64,67 @@ export default function Profile() {
     nav('/')
   }
 
+  // 当前播放的创作（用于"打开音乐"）
+  const [playing, setPlaying] = useState<Creation | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  // 打开音乐：弹窗播放
+  const playCreation = (c: Creation) => {
+    setPlaying(c)
+  }
+
+  // 下载
+  const downloadCreation = (c: Creation) => {
+    if (!c.audioUrl) {
+      alert('该作品暂无音频文件，无法下载')
+      return
+    }
+    const a = document.createElement('a')
+    a.href = c.audioUrl
+    a.download = `${c.title || '作品'}.mp3`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
+  // 分享
+  const shareCreation = async (c: Creation) => {
+    const text = `我用音乐制作工具创作了《${c.title}》，快来听听！`
+    if (c.shared) {
+      // 已上架：复制广场链接
+      try {
+        await navigator.clipboard.writeText(`${window.location.origin}/plaza`)
+        alert('已复制广场链接，可粘贴到微信/QQ 分享')
+      } catch {
+        alert('请手动复制：' + text)
+      }
+    } else {
+      // 未上架：询问是否上架
+      if (confirm('该作品尚未分享到广场，是否分享到广场？')) {
+        try {
+          await api.shareCreation(c.id)
+          await loadCreations()
+          await loadPlaza()
+          alert('已分享到广场！')
+        } catch (e: any) {
+          alert(e.message || '分享失败')
+        }
+      } else {
+        // 复制文案
+        if (navigator.share) {
+          navigator.share({ title: '音乐制作工具作品', text }).catch(() => {})
+        } else {
+          try {
+            await navigator.clipboard.writeText(text)
+            alert('已复制分享文案')
+          } catch {
+            alert('请手动复制：' + text)
+          }
+        }
+      }
+    }
+  }
+
   if (!user) return <LoginView onDone={() => loadUser()} />
 
   return (
@@ -78,7 +140,11 @@ export default function Profile() {
           <div>
             <h1 className="font-display text-3xl font-semibold">{user.nickname}</h1>
             <div className="text-sm text-muted mt-0.5">
-              {user.loginType === 'phone' ? `手机号 ${user.phoneMasked}` : `微信 ${user.wechatMasked || '已授权'}`}
+              {user.loginType === 'password' && user.username
+                ? `账号 ${user.username}`
+                : user.loginType === 'phone'
+                  ? `手机号 ${user.phoneMasked}`
+                  : `微信 ${user.wechatMasked || '已授权'}`}
             </div>
           </div>
           <div className="ml-auto flex gap-2">
@@ -124,7 +190,10 @@ export default function Profile() {
                       <Music2 size={16} className="text-coral" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm truncate">{c.title}</div>
+                      <div className="font-medium text-sm truncate flex items-center gap-2">
+                        {c.title}
+                        {c.shared && <span className="text-[10px] text-forest flex items-center gap-0.5"><Check size={10} />已上架</span>}
+                      </div>
                       <div className="text-xs text-muted mt-0.5 flex items-center gap-2">
                         <span>{MODE_LABEL[c.mode] || c.mode}</span>
                         <span>·</span>
@@ -133,12 +202,28 @@ export default function Profile() {
                         <span>{c.createdAt.replace('T', ' ').slice(0, 16)}</span>
                       </div>
                     </div>
-                    <div className="text-xs">
-                      {c.shared ? (
-                        <span className="text-forest flex items-center gap-1"><Check size={12} /> 已上架</span>
-                      ) : (
-                        <span className="text-muted">仅自己</span>
-                      )}
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <button
+                        onClick={() => playCreation(c)}
+                        title="打开音乐"
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-muted hover:bg-coral/10 hover:text-coral transition-colors"
+                      >
+                        <Play size={14} />
+                      </button>
+                      <button
+                        onClick={() => downloadCreation(c)}
+                        title="下载"
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-muted hover:bg-coral/10 hover:text-coral transition-colors"
+                      >
+                        <Download size={14} />
+                      </button>
+                      <button
+                        onClick={() => shareCreation(c)}
+                        title="分享"
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-muted hover:bg-coral/10 hover:text-coral transition-colors"
+                      >
+                        <Share2 size={14} />
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -175,42 +260,89 @@ export default function Profile() {
           </div>
         )}
       </div>
+
+      {/* 打开音乐弹窗 */}
+      {playing && (
+        <Modal open onClose={() => { setPlaying(null); audioRef.current?.pause(); audioRef.current = null }} size="sm">
+          <div className="p-7 text-center">
+            <div className="mx-auto mb-5 w-16 h-16 rounded-2xl bg-coral/15 flex items-center justify-center">
+              <Music2 className="text-coral" size={28} />
+            </div>
+            <h3 className="font-display text-xl font-semibold">{playing.title}</h3>
+            <div className="mt-1 text-xs text-muted">
+              {MODE_LABEL[playing.mode] || playing.mode}
+              {playing.voice && ` · ${playing.voice === 'male' ? '男声' : '女声'}`}
+            </div>
+
+            {playing.audioUrl ? (
+              <div className="mt-5">
+                <audio
+                  ref={(el) => { audioRef.current = el }}
+                  src={playing.audioUrl}
+                  controls
+                  autoPlay
+                  className="w-full"
+                />
+                <p className="mt-3 text-xs text-muted">音频正在播放，可在此控制</p>
+              </div>
+            ) : (
+              <div className="mt-5 p-4 rounded-xl bg-cream text-sm text-muted">
+                该作品为本地合成音乐，无音频文件可播放。
+                <div className="mt-2">
+                  <Button variant="primary" size="sm" onClick={() => nav('/')}>去重新创作</Button>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-5 flex gap-2">
+              <Button variant="outline" size="sm" block onClick={() => { setPlaying(null); audioRef.current?.pause(); audioRef.current = null }}>
+                关闭
+              </Button>
+              <Button variant="primary" size="sm" block onClick={() => { nav('/'); setPlaying(null); audioRef.current?.pause(); audioRef.current = null }}>
+                再创作一首
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
 
 /**
- * 登录视图
+ * 登录视图：账号密码注册 / 登录
  */
 function LoginView({ onDone }: { onDone: () => void }) {
   const nav = useNavigate()
-  const [type, setType] = useState<'phone' | 'wechat'>('phone')
-  const [phone, setPhone] = useState('')
-  const [code, setCode] = useState('')
+  const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [nickname, setNickname] = useState('')
   const [loading, setLoading] = useState(false)
   const [agreed, setAgreed] = useState(true)
 
   const submit = async () => {
-    if (type === 'phone' && !/^\d{11}$/.test(phone)) {
-      alert('请输入 11 位手机号')
+    if (!username.trim()) {
+      alert('请输入用户名')
+      return
+    }
+    if (!password) {
+      alert('请输入密码')
       return
     }
     if (!agreed) {
-      alert('请先同意隐私保护说明')
+      alert('请先同意用户协议与隐私保护说明')
       return
     }
     setLoading(true)
     try {
-      const r = await api.login({
-        type,
-        phone: type === 'phone' ? phone : undefined,
-        code: type === 'phone' ? code || '1234' : 'wx_demo_auth',
-        nickname: type === 'wechat' ? `微信用户${Math.floor(Math.random() * 9000) + 1000}` : undefined,
-      })
+      const r = mode === 'register'
+        ? await api.register({ username: username.trim(), password, nickname: nickname.trim() || undefined })
+        : await api.login({ username: username.trim(), password })
       setUserToken(r.token)
       await onDone()
     } catch (e: any) {
-      alert(e.message || '登录失败')
+      alert(e.message || '操作失败')
     } finally {
       setLoading(false)
     }
@@ -224,58 +356,70 @@ function LoginView({ onDone }: { onDone: () => void }) {
             <Music2 className="text-coral" size={26} />
           </div>
           <h1 className="font-display text-3xl font-semibold">欢迎使用音乐制作工具</h1>
-          <p className="mt-2 text-muted text-sm">登录后保存你的创作，并分享给朋友</p>
+          <p className="mt-2 text-muted text-sm">注册账号保存你的创作，并分享给朋友</p>
         </div>
 
         <div className="bg-paper rounded-3xl border border-line shadow-soft p-7">
+          {/* 切换：登录 / 注册 */}
           <div className="inline-flex p-1 rounded-full bg-cream border border-line mb-5 w-full">
             <button
-              onClick={() => setType('phone')}
-              className={cn('flex-1 py-2 rounded-full text-sm font-medium flex items-center justify-center gap-1.5', type === 'phone' ? 'bg-ink text-paper' : 'text-muted')}
+              onClick={() => setMode('login')}
+              className={cn('flex-1 py-2 rounded-full text-sm font-medium', mode === 'login' ? 'bg-ink text-paper' : 'text-muted')}
             >
-              <Phone size={14} /> 手机号
+              登录
             </button>
             <button
-              onClick={() => setType('wechat')}
-              className={cn('flex-1 py-2 rounded-full text-sm font-medium flex items-center justify-center gap-1.5', type === 'wechat' ? 'bg-ink text-paper' : 'text-muted')}
+              onClick={() => setMode('register')}
+              className={cn('flex-1 py-2 rounded-full text-sm font-medium', mode === 'register' ? 'bg-ink text-paper' : 'text-muted')}
             >
-              <Hash size={14} /> 微信
+              注册新账号
             </button>
           </div>
 
-          {type === 'phone' ? (
-            <div className="space-y-3">
+          <div className="space-y-3">
+            <div>
+              <label className="block mb-1.5 text-xs text-muted">用户名</label>
               <input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
-                placeholder="手机号"
+                value={username}
+                onChange={(e) => setUsername(e.target.value.replace(/[^\w]/g, '').slice(0, 20))}
+                placeholder="3-20 位，字母开头，仅含字母/数字/下划线"
                 className="focus-coral w-full rounded-xl border border-line bg-cream/40 px-4 py-3 text-sm"
               />
-              <div className="flex gap-2">
+            </div>
+
+            {mode === 'register' && (
+              <div>
+                <label className="block mb-1.5 text-xs text-muted">昵称（可选）</label>
                 <input
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.slice(0, 6))}
-                  placeholder="验证码"
-                  className="focus-coral flex-1 rounded-xl border border-line bg-cream/40 px-4 py-3 text-sm"
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value.slice(0, 30))}
+                  placeholder="不填则默认用用户名"
+                  className="focus-coral w-full rounded-xl border border-line bg-cream/40 px-4 py-3 text-sm"
                 />
-                <Button variant="outline" size="md" onClick={() => setCode('1234')}>获取验证码</Button>
               </div>
-              <Button variant="primary" size="lg" block loading={loading} onClick={submit}>登录</Button>
-            </div>
-          ) : (
+            )}
+
             <div>
-              <Button variant="wechat" size="lg" block loading={loading} onClick={submit}>
-                <Hash size={16} /> 微信一键登录
-              </Button>
-              <p className="mt-2 text-center text-xs text-muted">演示环境将模拟微信授权</p>
+              <label className="block mb-1.5 text-xs text-muted">密码</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value.slice(0, 64))}
+                placeholder="6-64 位，至少包含字母和数字"
+                className="focus-coral w-full rounded-xl border border-line bg-cream/40 px-4 py-3 text-sm"
+              />
             </div>
-          )}
+
+            <Button variant="primary" size="lg" block loading={loading} onClick={submit}>
+              {mode === 'register' ? '注册并登录' : '登录'}
+            </Button>
+          </div>
 
           <label className="mt-5 flex items-start gap-2 text-xs text-muted cursor-pointer">
             <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5 accent-coral" />
             <span>
               我已阅读并同意<span className="text-coral">《用户协议》</span>与<span className="text-coral">《隐私保护说明》</span>，
-              我的手机号与微信信息将被加密存储，仅本人可见。
+              账号信息将被加密存储，仅本人可见。
             </span>
           </label>
         </div>

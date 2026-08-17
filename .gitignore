@@ -28,3 +28,11 @@ dist-ssr
 *.sw?
 .vite
 .vercel
+
+# 临时文件
+*.png
+*.zip
+.trae-html-share-packages/
+
+# 数据库文件
+server/data/app.db

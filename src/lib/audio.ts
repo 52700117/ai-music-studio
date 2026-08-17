@@ -11,6 +11,7 @@ export interface AudioSeed {
   voice?: 'male' | 'female'
   prompt?: string
   lyrics?: string
+  durationSec?: number
 }
 
 /**
@@ -123,7 +124,7 @@ interface Note {
 }
 
 /**
- * 根据情绪生成音符序列
+ * 根据情绪生成音符序列 — 增强版：更丰富的和弦、琶音、旋律变化
  */
 function buildNotes(seed: AudioSeed, titleSeed: string): { notes: Note[]; totalDur: number; style: MoodStyle } {
   const mood = detectMood(seed.prompt || '')
@@ -138,57 +139,105 @@ function buildNotes(seed: AudioSeed, titleSeed: string): { notes: Note[]; totalD
   const bpm = style.bpm[0] + (h % (style.bpm[1] - style.bpm[0]))
   const beatDur = 60 / bpm
   const noteDur = beatDur * 0.5
-  const bars = 16
   const beatsPerBar = 4
+
+  // 根据用户设置的时长决定小节数（每小节约 2-4 秒）
+  const targetDur = seed.durationSec || 30
+  const bars = Math.max(8, Math.ceil(targetDur / (beatsPerBar * beatDur)))
   const totalDur = bars * beatsPerBar * beatDur
 
   const notes: Note[] = []
   let t = 0
 
+  // 和弦进行扩展：加入 7th 和 9th 色彩音
+  const chordExtensions = [1, 1.25, 1.5, 1.875, 2.25] // root, 3rd, 5th, 7th, 9th
+
+  // 旋律种子变化：每 4 小节切换旋律模式
+  const melodyPatterns = [
+    (bar: number, beat: number) => (h >> ((bar * 8 + beat) % 28)) % scale.length,
+    (bar: number, beat: number) => (h >> ((bar * 5 + beat * 3) % 24)) % scale.length,
+    (bar: number, beat: number) => (h >> ((bar * 3 + beat * 7) % 32)) % scale.length,
+    (bar: number, beat: number) => (h >> ((bar * 11 + beat * 2) % 20)) % scale.length,
+  ]
+
   for (let bar = 0; bar < bars; bar++) {
     const chordIdx = Math.floor(bar / 2) % chords.length
     const chordRoot = chords[chordIdx]
-    const chordThird = chordRoot * 1.25
-    const chordFifth = chordRoot * 1.5
 
-    // 和弦铺底
-    notes.push({ freq: chordRoot, start: t, dur: beatDur * 4, velocity: 0.12, type: 'chord' })
-    notes.push({ freq: chordThird, start: t, dur: beatDur * 4, velocity: 0.1, type: 'chord' })
-    notes.push({ freq: chordFifth, start: t, dur: beatDur * 4, velocity: 0.1, type: 'chord' })
+    // 前 4 小节和最后 4 小节用 block chord，中间用琶音
+    const useArpeggio = bar >= 4 && bar < bars - 4
 
-    // 低音线
-    notes.push({ freq: chordRoot * 0.5, start: t, dur: beatDur * 1.5, velocity: 0.22, type: 'bass' })
-    notes.push({ freq: chordRoot * 0.5, start: t + beatDur * 2, dur: beatDur * 1.5, velocity: 0.2, type: 'bass' })
+    if (useArpeggio) {
+      // 琶音和弦：逐个弹出和弦音
+      for (let b = 0; b < beatsPerBar; b++) {
+        const extIdx = b % chordExtensions.length
+        const freq = chordRoot * chordExtensions[extIdx]
+        notes.push({ freq, start: t + b * beatDur, dur: beatDur * 0.9, velocity: 0.1, type: 'chord' })
+      }
+    } else {
+      // Block chord 铺底（带 7th/9th 色彩）
+      chordExtensions.slice(0, 4).forEach((ext, i) => {
+        notes.push({ freq: chordRoot * ext, start: t, dur: beatDur * 4, velocity: 0.08 + (i === 0 ? 0.04 : 0), type: 'chord' })
+      })
+    }
+
+    // 低音线：Walking bass（每拍换音，更有律动感）
+    const bassPattern = [
+      chordRoot * 0.5,
+      chordRoot * 0.56,  // 3rd
+      chordRoot * 0.75,  // 5th
+      chordRoot * 0.56,  // 3rd
+    ]
+    for (let b = 0; b < beatsPerBar; b++) {
+      notes.push({ freq: bassPattern[b], start: t + b * beatDur, dur: beatDur * 0.8, velocity: 0.22, type: 'bass' })
+    }
 
     // 鼓点
     if (style.drum === 'soft' || style.drum === 'rock') {
-      // Kick - 每拍一次
-      for (let b = 0; b < beatsPerBar; b++) {
-        notes.push({ freq: 60, start: t + b * beatDur, dur: 0.15, velocity: style.drum === 'rock' ? 0.5 : 0.3, type: 'kick' })
-      }
-      // Snare - 2、4拍
-      if (style.drum === 'rock') {
-        notes.push({ freq: 200, start: t + beatDur, dur: 0.1, velocity: 0.4, type: 'snare' })
-        notes.push({ freq: 200, start: t + beatDur * 3, dur: 0.1, velocity: 0.4, type: 'snare' })
-      }
+      // Kick - 1、3 拍
+      notes.push({ freq: 60, start: t, dur: 0.15, velocity: style.drum === 'rock' ? 0.5 : 0.3, type: 'kick' })
+      notes.push({ freq: 60, start: t + beatDur * 2, dur: 0.15, velocity: style.drum === 'rock' ? 0.5 : 0.3, type: 'kick' })
+      // Snare - 2、4 拍
+      notes.push({ freq: 200, start: t + beatDur, dur: 0.1, velocity: 0.35, type: 'snare' })
+      notes.push({ freq: 200, start: t + beatDur * 3, dur: 0.1, velocity: 0.35, type: 'snare' })
       // Hi-hat - 八分音符
       for (let b = 0; b < beatsPerBar * 2; b++) {
-        notes.push({ freq: 8000, start: t + b * noteDur, dur: 0.05, velocity: 0.08, type: 'hat' })
+        const isAccent = b % 4 === 2
+        notes.push({ freq: 8000, start: t + b * noteDur, dur: 0.05, velocity: isAccent ? 0.12 : 0.06, type: 'hat' })
       }
     }
 
-    // 旋律线
+    // 旋律线：每 4 小节切换 pattern，增加变化
+    const patternIdx = Math.floor(bar / 4) % melodyPatterns.length
+    const getNoteIdx = melodyPatterns[patternIdx]
+
     for (let beat = 0; beat < beatsPerBar * 2; beat++) {
-      const noteIdx = (h >> ((bar * 8 + beat) % 28)) % scale.length
-      const freq = scale[noteIdx]
-      const isRest = (h >> (bar + beat * 3)) & 1 && beat === 2 && bar % 3 === 0
+      const noteIdx = getNoteIdx(bar, beat)
+      // 偶尔使用八度跳跃增加层次
+      const octaveShift = ((h >> (bar + beat)) & 3) === 0 ? 2 : 1
+      const freq = scale[noteIdx % scale.length] * octaveShift
+
+      // 休止符：偶尔停一下增加节奏感
+      const isRest = ((h >> (bar * 3 + beat * 5)) & 7) === 0 && beat === 2 && bar % 3 === 0
       if (!isRest) {
-        const dur = beat % 3 === 2 ? noteDur * 1.5 : noteDur
-        const velocity = 0.28 + ((h >> beat) & 1) * 0.1
-        notes.push({ freq, start: t, dur, velocity, type: 'melody' })
+        // 旋律节奏变化：有些音长有些音短
+        let dur = noteDur
+        if (beat % 4 === 3) dur = noteDur * 1.5  // 切分音
+        else if (beat % 6 === 5) dur = noteDur * 2  // 长音
+
+        const velocity = 0.25 + ((h >> (beat + bar)) & 3) * 0.08
+        notes.push({ freq, start: t + beat * noteDur, dur, velocity, type: 'melody' })
       }
-      t += noteDur
     }
+
+    // 每 8 小节加一个 fill（过渡段）
+    if (bar > 0 && bar % 8 === 7 && bar < bars - 2) {
+      const fillFreq = scale[(h >> bar) % scale.length] * 2
+      for (let f = 0; f < 4; f++) {
+        notes.push({ freq: fillFreq * (1 + f * 0.06), start: t + beatDur * 3 + f * noteDur * 0.5, dur: noteDur * 0.4, velocity: 0.2, type: 'melody' })
+      }
+    }
+
     t = (bar + 1) * beatsPerBar * beatDur
   }
 
@@ -242,11 +291,11 @@ function speakLyrics(lyrics: string, voice: 'male' | 'female' | undefined, durat
 /**
  * 在线播放一段生成的旋律
  */
-export function playGenerated(seed: AudioSeed, titleSeed: string, durationSec = 30): () => void {
+export function playGenerated(seed: AudioSeed, titleSeed: string, durationSec?: number): () => void {
   const Ctx = window.AudioContext || (window as any).webkitAudioContext
   const ctx = new Ctx()
   const { notes, totalDur, style } = buildNotes(seed, titleSeed)
-  const actualDur = Math.min(durationSec, totalDur)
+  const actualDur = Math.min(durationSec || seed.durationSec || 30, totalDur)
 
   const master = ctx.createGain()
   master.gain.value = 0.22
@@ -359,10 +408,10 @@ export function playGenerated(seed: AudioSeed, titleSeed: string, durationSec = 
 /**
  * 渲染为 WAV Blob（用于下载）
  */
-export function renderWavBlob(seed: AudioSeed, titleSeed: string, durationSec = 30): Blob {
+export function renderWavBlob(seed: AudioSeed, titleSeed: string, durationSec?: number): Blob {
   const sampleRate = 22050
   const { notes, totalDur, style } = buildNotes(seed, titleSeed)
-  const actualDur = Math.min(durationSec, totalDur)
+  const actualDur = Math.min(durationSec || seed.durationSec || 30, totalDur)
   const total = Math.floor(sampleRate * actualDur)
   const buffer = new Float32Array(total)
 

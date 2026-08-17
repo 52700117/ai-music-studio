@@ -44,13 +44,14 @@ export default function CompletionModal({ open, title, seed, creationId, audioUr
         setPlaying(true)
       } else {
         // 降级：振荡器 + TTS
-        stopRef.current = playGenerated(seed, title, 30)
+        const dur = seed.durationSec || 30
+        stopRef.current = playGenerated(seed, title)
         setPlaying(true)
         setTimeout(() => {
           stopRef.current?.()
           stopRef.current = null
           setPlaying(false)
-        }, 30000)
+        }, dur * 1000)
       }
     }
   }
@@ -66,7 +67,7 @@ export default function CompletionModal({ open, title, seed, creationId, audioUr
       document.body.removeChild(a)
     } else {
       // 降级：振荡器渲染
-      const blob = renderWavBlob(seed, title, 30)
+      const blob = renderWavBlob(seed, title)
       downloadBlob(blob, `${title || '作品'}.wav`)
     }
   }
@@ -143,11 +144,17 @@ export default function CompletionModal({ open, title, seed, creationId, audioUr
             </Button>
           </div>
 
-          <div className="mt-6 flex items-center justify-between">
-            <button onClick={() => setStage('askShare')} className="text-sm text-coral font-semibold hover:underline">
+          <div className="mt-6 flex flex-col gap-3 items-stretch">
+            <button
+              onClick={() => setStage('askShare')}
+              className="w-full py-3 rounded-full bg-coral text-white text-sm font-semibold hover:bg-coral/90 transition-colors"
+            >
               下一步：是否放到广场？ →
             </button>
-            <button onClick={close} className="text-sm text-muted hover:text-ink">
+            <button
+              onClick={close}
+              className="w-full py-3 rounded-full border border-line text-sm font-medium text-muted hover:text-ink hover:border-ink/30 transition-colors"
+            >
               稍后再说
             </button>
           </div>
