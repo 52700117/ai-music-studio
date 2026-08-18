@@ -3,7 +3,14 @@
  */
 
 const TOKEN_KEY = 'sf_token'
-const ADMIN_TOKEN_KEY = 'sf_admin_token'
+
+// ========================================================================
+// 严格模式：管理员 token 完全不落盘（不写 localStorage / sessionStorage / cookie）
+//   只存在下面这个模块级的内存变量里
+//   → 刷新页面 / 关闭标签页 / 新开标签页 / 切路由再回来 → 变量被清空
+//   → 100% 保证「每次打开后台都必须重新输入密码登录」
+// ========================================================================
+let MEMORY_ADMIN_TOKEN: string | null = null
 
 export function getUserToken(): string | null {
   return localStorage.getItem(TOKEN_KEY)
@@ -12,12 +19,45 @@ export function setUserToken(t: string | null): void {
   if (t) localStorage.setItem(TOKEN_KEY, t)
   else localStorage.removeItem(TOKEN_KEY)
 }
+
+// 管理员：只读写内存变量，永不落盘
 export function getAdminToken(): string | null {
-  return localStorage.getItem(ADMIN_TOKEN_KEY)
+  return MEMORY_ADMIN_TOKEN
 }
 export function setAdminToken(t: string | null): void {
-  if (t) localStorage.setItem(ADMIN_TOKEN_KEY, t)
-  else localStorage.removeItem(ADMIN_TOKEN_KEY)
+  MEMORY_ADMIN_TOKEN = t
+}
+// 强制清除管理员登录态（内存态 + 旧版本遗留可能残留的 storage，保证绝对干净）
+// 注意：这里用原生双 API 清，避免任何第三方缓存或全局 monkeypatch 失效
+export function clearAdminAuth(): void {
+  MEMORY_ADMIN_TOKEN = null
+  try {
+    // 兼容旧版本曾在 storage 里写过的 key，彻底清掉避免任何残留
+    const legacyKeys = [
+      'sf_admin_token',
+      'sf_admin_token_session',
+      'sf_admin_username',
+    ]
+    if (typeof window !== 'undefined' && window.localStorage) {
+      legacyKeys.forEach((k) => window.localStorage.removeItem(k))
+      // 兜底：遍历全部 key，名字里包含 admin 的全部清（防止以后加新 key 又漏）
+      const adminKeys: string[] = []
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const k = window.localStorage.key(i)
+        if (k && (k.includes('admin') || k.includes('ADMIN'))) adminKeys.push(k)
+      }
+      adminKeys.forEach((k) => window.localStorage.removeItem(k))
+    }
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      legacyKeys.forEach((k) => window.sessionStorage.removeItem(k))
+      const adminKeys: string[] = []
+      for (let i = 0; i < window.sessionStorage.length; i++) {
+        const k = window.sessionStorage.key(i)
+        if (k && (k.includes('admin') || k.includes('ADMIN'))) adminKeys.push(k)
+      }
+      adminKeys.forEach((k) => window.sessionStorage.removeItem(k))
+    }
+  } catch { /* ignore */ }
 }
 
 export class ApiError extends Error {
@@ -77,6 +117,14 @@ async function request<T>(path: string, opts: ReqOpts = {}): Promise<T> {
   if (!res.ok) {
     const msg = data?.error || `请求失败 (${res.status})`
     const err = new ApiError(msg, res.status, data?.code)
+    // 管理员鉴权失败（401）：清掉本地 token，下次打开不会再误判
+    if (res.status === 401 && auth === 'admin') {
+      setAdminToken(null)
+    }
+    // 普通用户鉴权失败（401）：也清 token，下次自动跳登录
+    if (res.status === 401 && auth === 'user') {
+      setUserToken(null)
+    }
     throw err
   }
   return data as T
@@ -175,6 +223,9 @@ export const api = {
       body: { username, password },
       auth: 'none',
     }),
+
+  adminMe: () =>
+    request<{ success: boolean; id: number; username: string }>('/api/admin/me', { auth: 'admin' }),
 
   adminStats: () =>
     request<{

@@ -1,12 +1,13 @@
 /**
- * 管理员登录页
+ * 管理员登录页（严格模式：每次打开必须输账号密码，不记住任何登录态）
  */
 import { useState } from 'react'
-import { Shield, Lock } from 'lucide-react'
+import { Lock } from 'lucide-react'
 import Button from '@/components/ui/Button'
-import { api, setAdminToken } from '@/lib'
+import { api, clearAdminAuth, setAdminToken } from '@/lib'
 
 export default function AdminLogin({ onDone }: { onDone: () => void }) {
+  // 严格模式：每次打开页面默认空，不记住用户名
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -20,6 +21,8 @@ export default function AdminLogin({ onDone }: { onDone: () => void }) {
     setLoading(true)
     setErr('')
     try {
+      // 先清一次任何残留登录态，保证每次登录都是干净的
+      clearAdminAuth()
       const r = await api.adminLogin(username.trim(), password.trim())
       setAdminToken(r.token)
       onDone()

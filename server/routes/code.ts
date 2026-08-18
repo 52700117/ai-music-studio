@@ -16,7 +16,12 @@ const router = Router()
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-const PROJECT_ROOT = path.resolve(__dirname, '../..')
+
+// 源码模式 / pkg 打包模式双兼容
+const IS_PKG = typeof (process as any).pkg !== 'undefined'
+const EXEC_DIR = path.dirname(process.execPath)
+const SOURCE_ROOT = path.resolve(__dirname, '../..')
+const PROJECT_ROOT = IS_PKG ? path.join(EXEC_DIR, 'resources') : SOURCE_ROOT
 
 // 允许编辑的目录白名单（相对项目根）
 const ALLOWED_DIRS = ['src', 'server']

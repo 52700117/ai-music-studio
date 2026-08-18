@@ -8,7 +8,6 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-dist
 dist-ssr
 *.local
 .env
@@ -31,8 +30,17 @@ dist-ssr
 
 # 临时文件
 *.png
-*.zip
+# 项目根的临时 zip 忽略，但 release/ 目录下的安装包 zip 不忽略
+/*.zip
 .trae-html-share-packages/
+.trae/
 
-# 数据库文件
+# 数据库文件（运行时临时 shm/wal 也忽略）
 server/data/app.db
+data/app.db
+data/app.db-*
+server/data/app.db-*
+
+# 打包缓存
+release/pkg-cache/
+release/*.log

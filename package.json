@@ -1,8 +1,33 @@
 {
   "name": "workspace",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "音乐创作软件 - 前后端一体",
+  "author": "music-app",
   "type": "module",
+  "bin": {
+    "music-app": "./start.js"
+  },
+  "main": "./start.js",
+  "pkg": {
+    "scripts": [
+      "start.js",
+      "server/**/*.ts",
+      "server/**/*.js"
+    ],
+    "assets": [
+      "dist/**/*",
+      "public/**/*",
+      "server/migrations/**/*",
+      "package.json"
+    ],
+    "targets": [
+      "node18-win-x64",
+      "node18-macos-x64",
+      "node18-macos-arm64"
+    ],
+    "outputPath": "release"
+  },
   "scripts": {
     "client:dev": "vite",
     "build": "tsc -b && vite build",
@@ -13,7 +38,22 @@
     "check": "tsc --noEmit",
     "server:dev": "nodemon",
     "dev": "concurrently \"npm run client:dev\" \"npm run server:dev\"",
-    "start": "tsx server/server.ts"
+    "start": "tsx server/server.ts",
+    "release:install-pkg": "npm install --no-save pkg@5.8.1",
+    "release:windows": "npm run build && npm run release:install-pkg && pkg . --targets node18-win-x64 --output release/music-app.exe && node scripts/copy-resources.mjs win",
+    "release:mac-x64": "npm run build && npm run release:install-pkg && pkg . --targets node18-macos-x64 --output release/music-app-mac-x64 && node scripts/copy-resources.mjs mac-x64",
+    "release:mac-arm": "npm run build && npm run release:install-pkg && pkg . --targets node18-macos-arm64 --output release/music-app-mac-arm && node scripts/copy-resources.mjs mac-arm",
+    "tauri": "tauri",
+    "app:dev": "tauri dev",
+    "app:build": "tauri build",
+    "app:build:windows": "tauri build --target x86_64-pc-windows-msvc",
+    "app:build:mac": "tauri build --target universal-apple-darwin",
+    "cap": "cap",
+    "mobile:sync": "npm run build && cap sync",
+    "mobile:android:open": "cap open android",
+    "mobile:android:build": "npm run mobile:sync && cap build android --keystorepath ./keystore.jks --keystorepass android --keystorealias androiddebugkey --keystorealiaspass android",
+    "mobile:ios:open": "cap open ios",
+    "mobile:ios:build": "npm run mobile:sync && cap build ios"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -35,7 +75,12 @@
     "zustand": "^5.0.3"
   },
   "devDependencies": {
+    "@capacitor/cli": "^6.1.2",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/ios": "^6.1.2",
     "@eslint/js": "^9.25.0",
+    "@tauri-apps/cli": "^2.1.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^4.17.21",
     "@types/node": "^22.15.30",

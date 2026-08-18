@@ -36,6 +36,28 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 })
 
 /**
+ * 验证当前管理员 token（用于前端打开后台时自动跳过登录）
+ */
+router.get('/me', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+  const admin = (req as any).admin
+  if (!admin) {
+    res.status(401).json({ success: false, error: '未登录' })
+    return
+  }
+  // 根据 token 里的 id 查一下管理员用户名返回
+  const result = await db.execute({
+    sql: 'SELECT id, username FROM admin WHERE id = ? LIMIT 1',
+    args: [admin.id as number],
+  })
+  const row = result.rows[0] as any
+  res.json({
+    success: true,
+    id: row?.id as number,
+    username: (row?.username as string) || 'admin',
+  })
+})
+
+/**
  * 当前软件状态
  */
 router.get('/status', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
