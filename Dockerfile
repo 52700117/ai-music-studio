@@ -26,6 +26,7 @@ RUN npm install --omit=dev && npm install tsx
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/server ./server
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/release ./release
 COPY --from=builder /app/node_modules ./node_modules
 
 # 环境变量（可被 Railway 覆盖）
