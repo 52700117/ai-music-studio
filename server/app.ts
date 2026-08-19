@@ -129,6 +129,23 @@ if (IS_PROD) {
 const RELEASE_DIR = IS_PKG
   ? path.join(EXEC_DIR, 'release')        // pkg 打包版：exe 同级 release/
   : path.resolve(__dirname, '../release') // 源码/Railway：项目根 release/
+
+// 调试接口：查看 release 目录内容
+app.get('/api/dl-debug', (_req: Request, res: Response): void => {
+  const exists = fs.existsSync(RELEASE_DIR)
+  const files = exists ? fs.readdirSync(RELEASE_DIR).map(f => {
+    const stat = fs.statSync(path.join(RELEASE_DIR, f))
+    return { name: f, size: stat.size, isFile: stat.isFile() }
+  }) : []
+  res.json({
+    releaseDir: RELEASE_DIR,
+    exists,
+    cwd: process.cwd(),
+    dirname: __dirname,
+    files,
+  })
+})
+
 if (fs.existsSync(RELEASE_DIR)) {
   app.use('/dl', express.static(RELEASE_DIR, {
     maxAge: '1d',
