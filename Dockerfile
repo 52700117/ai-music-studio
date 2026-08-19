@@ -3,18 +3,24 @@
 # ---- Build Stage ----
 FROM node:20-alpine AS builder
 
+# 缓存破坏：每次推送都重新 COPY，不使用旧缓存
+ARG CACHE_BUST=20260819-v2
+
 WORKDIR /app
 
 # 安装依赖（利用缓存）
 COPY package.json pnpm-lock.yaml* ./
 RUN corepack enable && pnpm install || npm install
 
+# 先单独复制 release 目录（确保 zip 安装包不被缓存跳过）
+COPY release/ ./release/
+
 # 复制源码 + 构建前端
 COPY . .
 RUN npm run build || npx vite build
 
 # 验证 release 目录内容（构建时打印，方便排查）
-RUN echo "=== release 目录内容 ===" && ls -lh release/ || echo "release 目录不存在"
+RUN echo "=== release 目录内容 ===" && ls -lh release/
 
 # ---- Runtime Stage ----
 FROM node:20-alpine
@@ -31,13 +37,11 @@ COPY --from=builder /app/server ./server
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/node_modules ./node_modules
 
-# 单独复制 release 目录（安装包直链下载）
-# 如果 release 目录不存在，docker 会报错——所以用 shell 形式保证容错
-RUN mkdir -p /app/release
-COPY --from=builder /app/release/ /app/release/
+# 复制 release 目录（安装包直链下载）
+COPY --from=builder /app/release/ ./release/
 
 # 验证 release 目录已正确复制
-RUN echo "=== runtime release 目录 ===" && ls -lh /app/release/ || true
+RUN echo "=== runtime release 目录 ===" && ls -lh /app/release/
 
 # 环境变量（可被 Railway 覆盖）
 ENV NODE_ENV=production
