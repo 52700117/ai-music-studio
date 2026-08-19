@@ -1,0 +1,12 @@
+# Nixpacks 配置 https://nixpacks.com/docs/configuration/file
+[phases.setup]
+nixPkgs = ['nodejs_20']
+
+[phases.install]
+cmds = ['npm install']
+
+[phases.build]
+cmds = ['npm run build']
+
+[start]
+cmd = 'npx tsx server/server.ts'
