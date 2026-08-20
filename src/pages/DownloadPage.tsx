@@ -1,7 +1,11 @@
 /**
  * 官方下载页：展示 Win/Mac 安装包 + 云端版快捷入口 + 使用步骤
+ * - 启动时先调 /api/dl-debug 拿 release 目录的真实文件列表，release 里不存在的包
+ *   直接标为"暂未开放"并禁用下载按钮，避免 UI 承诺存在、实际 404 被兜成 index.html，
+ *   让用户下载到假 zip 解压时提示"压缩文件格式未知或者数据已经被损坏"。
  */
-import { Download, Monitor, Cloud, ArrowRight, Check, Apple, ChevronRight, ExternalLink } from 'lucide-react'
+import { Download, Monitor, Cloud, ArrowRight, Check, Apple, ChevronRight, ExternalLink, AlertTriangle, Loader2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import Button from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 
@@ -15,45 +19,59 @@ interface PackageItem {
   recommended?: boolean
 }
 
+interface ReleaseFile {
+  name: string
+  size: number
+  isFile: boolean
+}
+
+interface DlDebugResp {
+  files?: ReleaseFile[]
+  releaseDir?: string
+  exists?: boolean
+}
+
+// 支持上架的完整清单（当前 release 目录里有哪个就给哪个启用）
+// 注意：源码一键版在任何情况下都是可用的，作为兜底方案
 const PACKAGES: PackageItem[] = [
-  {
-    os: 'windows',
-    name: 'Windows 免安装版',
-    desc: '解压即用，支持 Win 10/11 x64',
-    icon: Monitor,
-    filename: 'music-app-windows.zip',
-    tag: '推荐',
-    recommended: true,
-  },
   {
     os: 'src-win',
     name: 'Windows 源码一键版',
-    desc: '需 Node.js 18+，适合开发者',
+    desc: '双击 一键启动.bat，自动安装并启动（需 Node.js 18+）',
     icon: Monitor,
     filename: 'music-app-all-in-one-src-windows.zip',
-  },
-  {
-    os: 'mac-arm',
-    name: 'macOS Apple Silicon 版',
-    desc: 'M1/M2/M3/M4 芯片，免安装',
-    icon: Apple,
-    filename: 'music-app-mac-arm.zip',
     tag: '推荐',
     recommended: true,
   },
   {
-    os: 'mac-x64',
-    name: 'macOS Intel 版',
-    desc: 'Intel 芯片 Mac，免安装',
-    icon: Apple,
-    filename: 'music-app-mac-x64.zip',
+    os: 'windows',
+    name: 'Windows 免安装版',
+    desc: '解压即用，支持 Win 10/11 x64，无需 Node.js',
+    icon: Monitor,
+    filename: 'music-app-windows.zip',
   },
   {
     os: 'src-mac',
     name: 'macOS 源码一键版',
-    desc: '需 Node.js 18+，适合开发者',
+    desc: '双击 一键启动.command，自动安装并启动（需 Node.js 18+）',
     icon: Apple,
     filename: 'music-app-all-in-one-src-mac.zip',
+    tag: '推荐',
+    recommended: true,
+  },
+  {
+    os: 'mac-arm',
+    name: 'macOS Apple Silicon 版',
+    desc: 'M1/M2/M3/M4 芯片，免安装无需 Node.js',
+    icon: Apple,
+    filename: 'music-app-mac-arm.zip',
+  },
+  {
+    os: 'mac-x64',
+    name: 'macOS Intel 版',
+    desc: 'Intel 芯片 Mac，免安装无需 Node.js',
+    icon: Apple,
+    filename: 'music-app-mac-x64.zip',
   },
 ]
 
@@ -87,8 +105,55 @@ const FAQ = [
   },
 ]
 
+function formatSize(n?: number): string {
+  if (!n || n <= 0) return ''
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`
+}
+
 export default function DownloadPage() {
+  const [release, setRelease] = useState<DlDebugResp | null>(null)
+  const [loadingFiles, setLoadingFiles] = useState(true)
+
+  // 拉取 release 目录真实文件列表，防止 UI 推荐不存在的包（比如 music-app-windows.zip）
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const resp = await fetch(`/api/dl-debug?_=${Date.now()}`, { cache: 'no-store' })
+        if (!resp.ok) throw new Error(`status ${resp.status}`)
+        const data = await resp.json() as DlDebugResp
+        if (!cancelled) setRelease(data)
+      } catch (err) {
+        console.warn('[download] fetch dl-debug failed', err)
+        if (!cancelled) setRelease({ exists: false, files: [] })
+      } finally {
+        if (!cancelled) setLoadingFiles(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [])
+
+  const availableNames = useMemo(() => {
+    const set = new Set<string>()
+    if (release?.files) {
+      for (const f of release.files) if (f.isFile) set.add(f.name)
+    }
+    return set
+  }, [release])
+
+  const sizeOf = (filename: string): number | undefined =>
+    release?.files?.find(f => f.isFile && f.name === filename)?.size
+
   const handleDownload = (pkg: PackageItem) => {
+    const available = availableNames.has(pkg.filename)
+    if (!available) {
+      alert('该版本正在重新打包上传，暂时无法下载，请选择下方的「源码一键版」，功能完全一致！')
+      return
+    }
     const url = `/dl/${pkg.filename}`
     const a = document.createElement('a')
     a.href = url
@@ -154,37 +219,73 @@ export default function DownloadPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {PACKAGES.map((pkg) => {
             const Icon = pkg.icon
+            const available = !loadingFiles && availableNames.has(pkg.filename)
+            const disabled = loadingFiles || !available
             return (
               <div
                 key={pkg.os}
                 className={cn(
-                  'relative rounded-3xl p-6 border transition-all hover:shadow-lift group',
-                  pkg.recommended
+                  'relative rounded-3xl p-6 border transition-all group',
+                  disabled && 'opacity-70',
+                  !disabled && 'hover:shadow-lift',
+                  pkg.recommended && !disabled
                     ? 'bg-gradient-to-br from-coral/5 to-transparent border-coral/20'
-                    : 'bg-paper border-line hover:border-ink/20',
+                    : 'bg-paper border-line',
+                  !disabled && 'hover:border-ink/20',
                 )}
               >
-                {pkg.tag && (
+                {pkg.tag && !disabled && (
                   <div className="absolute top-5 right-5 px-2.5 py-1 rounded-full bg-coral text-white text-[10px] font-semibold tracking-wide">
                     {pkg.tag}
                   </div>
                 )}
+                {!available && !loadingFiles && (
+                  <div className="absolute top-5 right-5 flex items-center gap-1 px-2.5 py-1 rounded-full bg-muted/20 text-muted text-[10px] font-semibold tracking-wide">
+                    <AlertTriangle size={10} /> 暂未开放
+                  </div>
+                )}
                 <div className={cn(
                   'w-14 h-14 rounded-2xl flex items-center justify-center mb-5 transition-all',
+                  disabled ? 'bg-cream text-muted' :
                   pkg.recommended ? 'bg-coral text-white' : 'bg-cream text-ink group-hover:bg-ink group-hover:text-paper',
                 )}>
-                  <Icon size={26} />
+                  {loadingFiles ? <Loader2 size={22} className="animate-spin" /> : <Icon size={26} />}
                 </div>
-                <h3 className="text-lg font-semibold text-ink">{pkg.name}</h3>
-                <p className="mt-1.5 text-sm text-muted">{pkg.desc}</p>
-                <div className="mt-5">
+                <h3 className={cn('text-lg font-semibold', disabled ? 'text-ink/70' : 'text-ink')}>{pkg.name}</h3>
+                <p className={cn('mt-1.5 text-sm leading-relaxed', disabled ? 'text-muted' : 'text-muted')}>
+                  {pkg.desc}
+                </p>
+                <div className="mt-3 flex items-center justify-between text-[11px] text-muted">
+                  <span>{available ? `文件大小：${formatSize(sizeOf(pkg.filename))}` : '正在重新打包上传中…'}</span>
+                  {available && (
+                    <a
+                      className="underline-offset-2 hover:underline"
+                      href={`/dl/${pkg.filename}.md5`}
+                      download={`${pkg.filename}.md5`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      MD5
+                    </a>
+                  )}
+                </div>
+                <div className="mt-4">
                   <Button
-                    variant={pkg.recommended ? 'primary' : 'dark'}
+                    variant={pkg.recommended && !disabled ? 'primary' : disabled ? 'outline' : 'dark'}
+                    disabled={disabled}
                     block
                     onClick={() => handleDownload(pkg)}
                   >
-                    <Download size={16} />
-                    下载 {pkg.filename}
+                    {disabled ? (
+                      <>
+                        <AlertTriangle size={16} />
+                        暂无法下载
+                      </>
+                    ) : (
+                      <>
+                        <Download size={16} />
+                        下载 {pkg.filename}
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>

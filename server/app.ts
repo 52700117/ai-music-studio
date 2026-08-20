@@ -59,6 +59,7 @@ app.use('/api', async (req: Request, res: Response, next: NextFunction): Promise
     url === '/status' ||
     url === '/health' ||
     url === '/version' ||
+    url === '/dl-debug' ||
     url.startsWith('/admin')
   if (!isExempt) {
     const active = await getAppActive()
@@ -244,6 +245,20 @@ if (fs.existsSync(RELEASE_DIR)) {
     })
   })
 }
+
+/**
+ * /dl/* 兜底 404
+ * 必须写在前面的 express.static(RELEASE_DIR) 之后，拦截"文件不存在"的情况。
+ * 关键：一定要放在 SPA fallback (app.get('*', send index.html)) 之前，否则不存在的 zip
+ *       会被返回 index.html HTML 内容，下载器保存为 zip，用户解压就会报错：
+ *       "这个压缩文件格式未知或者数据已经被损坏"
+ */
+app.use('/dl', (_req: Request, res: Response): void => {
+  res.status(404).json({
+    success: false,
+    error: '该安装包暂时未上传，请稍后重试或选择源码一键版。',
+  })
+})
 
 /**
  * 错误处理
