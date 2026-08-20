@@ -204,11 +204,34 @@ app.get('/api/dl-debug', (_req: Request, res: Response): void => {
 if (fs.existsSync(RELEASE_DIR)) {
   app.use('/dl', express.static(RELEASE_DIR, {
     maxAge: '1d',
+    acceptRanges: true,
+    lastModified: true,
     setHeaders: (res, filePath) => {
+      const low = filePath.toLowerCase()
       // zip 包强制下载（而不是在浏览器里打开）
-      if (filePath.toLowerCase().endsWith('.zip')) {
+      if (low.endsWith('.zip')) {
+        const filename = path.basename(filePath)
+        // RFC 5987 兼容中文文件名（Chrome/QB/夸克 等不会因编码异常截断下载）
+        const safeAscii = filename.replace(/[^\x20-\x7E]/g, '_')
+        const utf8Encoded = encodeURIComponent(filename)
         res.setHeader('Content-Type', 'application/zip')
-        res.setHeader('Content-Disposition', `attachment; filename="${path.basename(filePath)}"`)
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename="${safeAscii}"; filename*=UTF-8''${utf8Encoded}`,
+        )
+        // 显式声明可预期的长度，避免代理/边缘节点在大文件 chunked 时提前断流
+        try {
+          const stat = fs.statSync(filePath)
+          if (stat.isFile()) res.setHeader('Content-Length', String(stat.size))
+        } catch {
+          /* ignore */
+        }
+      }
+      // md5 校验文件也作为纯文本下载
+      if (low.endsWith('.md5')) {
+        const filename = path.basename(filePath)
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
       }
     },
   }))
