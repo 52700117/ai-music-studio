@@ -35,6 +35,8 @@ export default function Editor() {
   const [aiLyricsReq, setAiLyricsReq] = useState('')
   // 音乐时长（秒）
   const [duration, setDuration] = useState(60)
+  // 歌曲语言：zh=中文，en=英文
+  const [language, setLanguage] = useState<'zh' | 'en'>('zh')
 
   const [generating, setGenerating] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -75,6 +77,9 @@ export default function Editor() {
       return
     }
 
+    // 英文模式：拼接语言提示让 MiniMax 生成英文歌词
+    const langHint = language === 'en' ? 'Please write and sing the lyrics in English.' : ''
+
     setGenerating(true)
     setProgress(0)
     setResult(null)
@@ -85,11 +90,11 @@ export default function Editor() {
     // - AI帮写模式：把 AI 写词要求作为单独段落，由后端传递给 MiniMax lyrics_optimizer
     let combinedPrompt: string | undefined
     if (lyricsMode === 'ai' && mode === 'original') {
-      combinedPrompt = [prompt.trim(), aiLyricsReq.trim() && `[AI写词要求]\n${aiLyricsReq.trim()}`]
+      combinedPrompt = [prompt.trim(), aiLyricsReq.trim() && `[AI写词要求]\n${aiLyricsReq.trim()}`, langHint]
         .filter(Boolean)
         .join('\n\n') || undefined
     } else {
-      combinedPrompt = [prompt.trim(), lyricsText.trim() && `歌词：\n${lyricsText.trim()}`]
+      combinedPrompt = [prompt.trim(), lyricsText.trim() && `歌词：\n${lyricsText.trim()}`, langHint]
         .filter(Boolean)
         .join('\n\n') || undefined
     }
@@ -199,6 +204,27 @@ export default function Editor() {
           rows={5}
           className="focus-coral w-full rounded-2xl border border-line bg-cream/40 p-4 text-sm leading-relaxed resize-none placeholder:text-muted/60"
         />
+
+        {/* 歌曲语言选择（原创音乐 & 改编音乐） */}
+        {(mode === 'original' || mode === 'lyrics') && (
+          <div className="mt-5">
+            <label className="block mb-2 text-sm font-semibold text-ink">歌曲语言</label>
+            <div className="inline-flex p-1 rounded-full bg-cream border border-line">
+              {([['zh', '中文'], ['en', '英文']] as const).map(([v, label]) => (
+                <button
+                  key={v}
+                  onClick={() => setLanguage(v)}
+                  className={cn(
+                    'px-5 py-2 rounded-full text-sm font-medium transition-all',
+                    language === v ? 'bg-ink text-paper' : 'text-muted hover:text-ink',
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* 人声选择（原创音乐 & 改编音乐） */}
         {(mode === 'original' || mode === 'lyrics') && (
