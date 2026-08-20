@@ -58,6 +58,7 @@ app.use('/api', async (req: Request, res: Response, next: NextFunction): Promise
   const isExempt =
     url === '/status' ||
     url === '/health' ||
+    url === '/version' ||
     url.startsWith('/admin')
   if (!isExempt) {
     const active = await getAppActive()
@@ -75,6 +76,60 @@ app.use('/api', async (req: Request, res: Response, next: NextFunction): Promise
 app.use('/api/status', statusRoutes)
 app.use('/api/health', (_req: Request, res: Response): void => {
   res.status(200).json({ success: true, message: 'ok' })
+})
+
+/**
+ * 版本检查接口（给前端自动更新机制用）
+ * - 优先返回 dist/version.json 中的构建版本（Vite closeBundle 写入）
+ * - 没有 version.json 时，回退为 dist/index.html 的修改时间（开发/老包兼容）
+ * - 响应头强制禁用浏览器缓存，避免 QQ 浏览器/夸克 等激进缓存导致拿不到最新版本
+ */
+app.get('/api/version', (_req: Request, res: Response): void => {
+  // 强制禁用所有缓存
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0')
+  res.setHeader('Pragma', 'no-cache')
+  res.setHeader('Expires', '0')
+  res.setHeader('Surrogate-Control', 'no-store')
+
+  try {
+    const versionJsonPath = path.join(DIST_DIR, 'version.json')
+    if (fs.existsSync(versionJsonPath)) {
+      const raw = fs.readFileSync(versionJsonPath, 'utf-8')
+      const parsed = JSON.parse(raw)
+      res.status(200).json({
+        success: true,
+        version: parsed.version,
+        builtAt: parsed.builtAt || null,
+        source: 'version.json',
+      })
+      return
+    }
+
+    // 回退：使用 index.html 的 mtime 作为版本号（秒级时间戳，避免毫秒漂移）
+    const indexPath = path.join(DIST_DIR, 'index.html')
+    if (fs.existsSync(indexPath)) {
+      const stat = fs.statSync(indexPath)
+      const fallbackVersion = String(Math.floor(stat.mtimeMs / 1000))
+      res.status(200).json({
+        success: true,
+        version: fallbackVersion,
+        builtAt: stat.mtime.toISOString(),
+        source: 'index.html-mtime',
+      })
+      return
+    }
+
+    // 开发环境（没有 dist）也返回一个稳定占位，避免前端报错
+    res.status(200).json({
+      success: true,
+      version: 'dev',
+      builtAt: new Date().toISOString(),
+      source: 'dev-placeholder',
+    })
+  } catch (err) {
+    console.error('[api/version] error:', err)
+    res.status(500).json({ success: false, error: '读取版本信息失败' })
+  }
 })
 
 /**
