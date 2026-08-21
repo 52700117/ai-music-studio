@@ -4,8 +4,9 @@
  *   直接标为"暂未开放"并禁用下载按钮，避免 UI 承诺存在、实际 404 被兜成 index.html，
  *   让用户下载到假 zip 解压时提示"压缩文件格式未知或者数据已经被损坏"。
  */
-import { Download, Monitor, Cloud, ArrowRight, Check, Apple, ChevronRight, ExternalLink, AlertTriangle, Loader2 } from 'lucide-react'
+import { Download, Monitor, Cloud, ArrowRight, Check, Apple, ChevronRight, ExternalLink, AlertTriangle, Loader2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import Button from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 
@@ -114,8 +115,23 @@ function formatSize(n?: number): string {
 }
 
 export default function DownloadPage() {
+  const [search, setSearch] = useSearchParams()
   const [release, setRelease] = useState<DlDebugResp | null>(null)
   const [loadingFiles, setLoadingFiles] = useState(true)
+  // 服务端 302 跳回来时携带的下载错误：?dl_error=not_found&dl_file=xxx
+  const dlError = search.get('dl_error')
+  const dlFile = search.get('dl_file')
+  const [dismissDlError, setDismissDlError] = useState(false)
+  const showDlError =
+    !dismissDlError &&
+    (dlError === 'not_found' || (dlError && dlError.length > 0))
+  const clearDlError = () => {
+    setDismissDlError(true)
+    const next = new URLSearchParams(search)
+    next.delete('dl_error')
+    next.delete('dl_file')
+    setSearch(next, { replace: true })
+  }
 
   // 拉取 release 目录真实文件列表，防止 UI 推荐不存在的包（比如 music-app-windows.zip）
   useEffect(() => {
@@ -165,6 +181,35 @@ export default function DownloadPage() {
 
   return (
     <div className="min-h-full">
+      {/* 下载失败回跳提示横幅 */}
+      {showDlError && (
+        <div className="mx-5 mt-4 rounded-2xl border border-coral/30 bg-coral/5 px-5 py-4 flex items-start gap-3 shadow-soft">
+          <div className="w-10 h-10 rounded-xl bg-coral/15 text-coral flex items-center justify-center flex-shrink-0">
+            <AlertTriangle size={20} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-ink leading-tight">
+              抱歉，「{dlFile || '该安装包'}」暂时未开放下载
+            </div>
+            <div className="mt-1 text-xs text-muted leading-relaxed">
+              免安装 pkg 桌面版（无需 Node.js）正在重新打包上传中，目前请直接下载下方【推荐】的「源码一键版」，
+              功能和桌面版完全一致，只需你电脑安装 Node.js 18+（首次启动会自动装依赖和构建，
+              <a href="https://nodejs.org/zh-cn" target="_blank" rel="noreferrer" className="text-ocean underline underline-offset-2 mx-0.5">点这里安装 Node.js</a>）。
+            </div>
+            <a href="#downloads" className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold text-ocean">
+              去选择源码一键版 <ChevronRight size={12} />
+            </a>
+          </div>
+          <button
+            onClick={clearDlError}
+            className="w-8 h-8 rounded-lg text-muted hover:bg-coral/10 hover:text-ink flex items-center justify-center flex-shrink-0"
+            aria-label="关闭"
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
       {/* Hero 区 */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-coral/5 via-transparent to-ocean/5" />

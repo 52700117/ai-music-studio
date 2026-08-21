@@ -207,8 +207,13 @@ if (fs.existsSync(RELEASE_DIR)) {
     maxAge: '1d',
     acceptRanges: true,
     lastModified: true,
+    fallthrough: true, // 关键：static 找不到时把控制权交给后续中间件，而不是直接 next('route')
     setHeaders: (res, filePath) => {
       const low = filePath.toLowerCase()
+      // 对下载文件统一禁用 CDN/边缘的压缩改写和内容变换（Railway Hikari 可能自动压缩）
+      res.setHeader('Cache-Control', 'public, max-age=86400, no-transform')
+      res.setHeader('Vary', 'Accept-Encoding')
+
       // zip 包强制下载（而不是在浏览器里打开）
       if (low.endsWith('.zip')) {
         const filename = path.basename(filePath)
@@ -236,27 +241,32 @@ if (fs.existsSync(RELEASE_DIR)) {
       }
     },
   }))
-} else {
-  // 即使目录不存在，/dl 请求也返回友好 JSON 提示（避免被 SPA fallback 兜成首页）
-  app.use('/dl', (_req: Request, res: Response): void => {
-    res.status(404).json({
-      success: false,
-      error: '暂无安装包，请先运行打包脚本生成 release 目录。',
-    })
-  })
 }
 
 /**
- * /dl/* 兜底 404
- * 必须写在前面的 express.static(RELEASE_DIR) 之后，拦截"文件不存在"的情况。
- * 关键：一定要放在 SPA fallback (app.get('*', send index.html)) 之前，否则不存在的 zip
- *       会被返回 index.html HTML 内容，下载器保存为 zip，用户解压就会报错：
- *       "这个压缩文件格式未知或者数据已经被损坏"
+ * /dl/* 兜底：文件不存在或 release 目录不存在时的错误处理
+ * 必须写在 express.static 之后、SPA fallback 之前。
+ *
+ * 智能判断客户端类型：
+ *   - 如果是浏览器直接下载 <a download> / 地址栏直链（Accept 包含 text/html 或无 X-Requested-With）：
+ *     302 跳回 /download，并在 query 里带错误信息，这样前端可以显示友好提示，浏览器
+ *     不会把 404/错误 JSON 作为 zip 保存（否则 Chrome 会显示"无法从网站上提取文件"）。
+ *   - 其他（fetch/XHR/curl/API 调用）：返回 JSON 404，便于前端自行判断。
  */
-app.use('/dl', (_req: Request, res: Response): void => {
+app.use('/dl', (req: Request, res: Response): void => {
+  const accept = String(req.headers.accept || '')
+  const xrw = String(req.headers['x-requested-with'] || '')
+  const filename = path.basename(req.path || '') || '安装包'
+  const viaBrowser = /html|xhtml/i.test(accept) || (xrw === '' && req.method === 'GET')
+  const file = encodeURIComponent(filename)
+  if (viaBrowser) {
+    res.redirect(302, `/download?dl_error=not_found&dl_file=${file}`)
+    return
+  }
   res.status(404).json({
     success: false,
     error: '该安装包暂时未上传，请稍后重试或选择源码一键版。',
+    file: filename,
   })
 })
 
