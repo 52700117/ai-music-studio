@@ -12,6 +12,7 @@ dist-ssr
 *.local
 .env
 .env.local
+.nsis-build/
 .pnpm-store
 .vercel
 

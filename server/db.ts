@@ -20,9 +20,12 @@ const __dirname = path.dirname(__filename)
  *   pkg 打包版：resources/ 目录在 exe 旁边，数据库 + 音频放 resources/data
  */
 const IS_PKG = typeof (process as any).pkg !== 'undefined'
+const IS_INSTALLER = !!process.env.MUSIC_APP_INSTALL_DIR
 const EXEC_DIR = path.dirname(process.execPath)
 const SOURCE_ROOT = path.resolve(__dirname, '..')
-const BASE_DIR = IS_PKG ? path.join(EXEC_DIR, 'resources') : SOURCE_ROOT
+const BASE_DIR = IS_INSTALLER
+  ? process.env.MUSIC_APP_INSTALL_DIR!
+  : IS_PKG ? path.join(EXEC_DIR, 'resources') : SOURCE_ROOT
 
 // Railway 持久化卷挂载在 /data；本地/打包版用 BASE_DIR/data
 const DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH
@@ -30,7 +33,7 @@ const DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH
   : path.join(BASE_DIR, 'data')
 const LOCAL_DB_PATH = path.resolve(DATA_DIR, 'app.db')
 // migrations 路径：pkg 打包版取 BASE_DIR/server/migrations；源码版取 __dirname/migrations
-const MIGRATION_PATH = IS_PKG
+const MIGRATION_PATH = (IS_PKG || IS_INSTALLER)
   ? path.join(BASE_DIR, 'server', 'migrations', '0001_init.sql')
   : path.resolve(__dirname, 'migrations/0001_init.sql')
 

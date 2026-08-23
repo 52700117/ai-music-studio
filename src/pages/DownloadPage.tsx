@@ -11,7 +11,7 @@ import Button from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 
 interface PackageItem {
-  os: 'windows' | 'mac-x64' | 'mac-arm' | 'src-win' | 'src-mac'
+  os: 'installer-win' | 'windows' | 'mac-x64' | 'mac-arm' | 'src-win' | 'src-mac'
   name: string
   desc: string
   icon: any
@@ -36,20 +36,20 @@ interface DlDebugResp {
 // 注意：源码一键版在任何情况下都是可用的，作为兜底方案
 const PACKAGES: PackageItem[] = [
   {
+    os: 'installer-win',
+    name: 'Windows 一键安装版',
+    desc: '双击安装，桌面自动出现图标，点击即用。无需 Node.js',
+    icon: Monitor,
+    filename: 'music-app-windows-installer.exe',
+    tag: '推荐',
+    recommended: true,
+  },
+  {
     os: 'src-win',
     name: 'Windows 源码一键版',
     desc: '双击 一键启动.bat，自动安装并启动（需 Node.js 18+）',
     icon: Monitor,
     filename: 'music-app-all-in-one-src-windows.zip',
-    tag: '推荐',
-    recommended: true,
-  },
-  {
-    os: 'windows',
-    name: 'Windows 免安装版',
-    desc: '解压即用，支持 Win 10/11 x64，无需 Node.js',
-    icon: Monitor,
-    filename: 'music-app-windows.zip',
   },
   {
     os: 'src-mac',
@@ -77,16 +77,16 @@ const PACKAGES: PackageItem[] = [
 ]
 
 const STEPS = [
-  { num: 1, title: '下载对应版本', desc: '选择你的电脑系统，点击上方下载按钮。' },
-  { num: 2, title: '解压文件', desc: '把下载的 zip 包解压到任意文件夹（建议不要放 C:\\Program Files）。' },
-  { num: 3, title: '双击启动', desc: 'Windows 双击「双击启动.bat」，Mac 双击「双击启动.command」。' },
+  { num: 1, title: '下载安装程序', desc: '点击上方「Windows 一键安装版」下载按钮，获取安装程序。' },
+  { num: 2, title: '双击安装', desc: '双击下载的安装程序，按提示完成安装（如提示 SmartScreen，点击「更多信息」→「仍要运行」）。' },
+  { num: 3, title: '桌面打开软件', desc: '安装完成后桌面会出现「音乐创作软件」图标，双击即可启动。' },
   { num: 4, title: '开始创作', desc: '浏览器会自动打开 http://localhost:3001 ，登录后即可开始创作音乐！' },
 ]
 
 const FAQ = [
   {
     q: '需要安装 Node.js 吗？',
-    a: '免安装版（music-app-windows.zip / music-app-mac-arm.zip / music-app-mac-x64.zip）已内置运行环境，不需要额外安装任何东西。源码一键版需要先安装 Node.js 18+。',
+    a: '一键安装版（music-app-windows-installer.exe）已内置完整运行环境，不需要额外安装任何东西。源码一键版需要先安装 Node.js 18+。',
   },
   {
     q: '电脑可以关机吗？关机后还能用吗？',

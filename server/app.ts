@@ -33,9 +33,12 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const IS_PKG = typeof (process as any).pkg !== 'undefined'
+const IS_INSTALLER = !!process.env.MUSIC_APP_INSTALL_DIR
 const EXEC_DIR = path.dirname(process.execPath)
 const SOURCE_ROOT = path.resolve(__dirname, '..')
-export const BASE_DIR = IS_PKG ? path.join(EXEC_DIR, 'resources') : SOURCE_ROOT
+export const BASE_DIR = IS_INSTALLER
+  ? process.env.MUSIC_APP_INSTALL_DIR!
+  : IS_PKG ? path.join(EXEC_DIR, 'resources') : SOURCE_ROOT
 
 dotenv.config()
 if (fs.existsSync(path.join(BASE_DIR, '.env'))) {
@@ -139,13 +142,13 @@ app.get('/api/version', (_req: Request, res: Response): void => {
  * - Railway 生产：Railway Volume 挂载的 /data/audio（MusicGen 生成的音频存这里）
  * - pkg 打包版：BASE_DIR/data/audio（exe 同级 resources/data/audio）
  */
-const PUBLIC_AUDIO_DIR = IS_PKG
+const PUBLIC_AUDIO_DIR = (IS_PKG || IS_INSTALLER)
   ? path.join(BASE_DIR, 'public', 'audio')
   : path.resolve(__dirname, '../public/audio')
 app.use('/audio', express.static(PUBLIC_AUDIO_DIR, { maxAge: '7d' }))
 const VOLUME_AUDIO_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH
   ? path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH, 'audio')
-  : IS_PKG
+  : (IS_PKG || IS_INSTALLER)
   ? path.join(BASE_DIR, 'data', 'audio')
   : path.resolve(__dirname, 'data/audio')
 if (fs.existsSync(VOLUME_AUDIO_DIR)) {
@@ -182,9 +185,9 @@ if (IS_PROD) {
  * 下载文件服务：/dl 路径暴露 release/ 目录，直链下载 Win/Mac 安装包
  * 支持三种运行形态，release 目录不存在时也不会报错（开发环境可以临时没包）
  */
-const RELEASE_DIR = IS_PKG
-  ? path.join(EXEC_DIR, 'release')        // pkg 打包版：exe 同级 release/
-  : path.resolve(__dirname, '../release') // 源码/Railway：项目根 release/
+const RELEASE_DIR = (IS_PKG || IS_INSTALLER)
+  ? path.join(BASE_DIR, 'release')
+  : path.resolve(__dirname, '../release')
 
 // 调试接口：查看 release 目录内容
 app.get('/api/dl-debug', (_req: Request, res: Response): void => {
