@@ -20,8 +20,11 @@ await build({
   outfile: path.join(outDir, 'server.mjs'),
   external: ['@libsql/client'],
   banner: {
+    // Polyfill require() for CJS deps (express, body-parser, etc.) in ESM context
     js: `// Bundled by esbuild for NSIS installer - do not edit manually
-// @libsql/client is external (native binary loaded at runtime)`,
+// @libsql/client is external (native binary loaded at runtime)
+import { createRequire as __createRequire } from 'module';
+const require = __createRequire(import.meta.url);`,
   },
   logLevel: 'info',
 })

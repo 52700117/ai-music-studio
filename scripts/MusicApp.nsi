@@ -1,5 +1,5 @@
 ; MusicApp NSIS Installer Script
-; 生成一个 Windows 安装程序：双击安装 → 桌面快捷方式 → 自动启动
+; 生成一个 Windows 安装程序：双击安装 → 桌面快捷方式 → 点击图标启动
 ; 编译: makensis MusicApp.nsi
 
 !define APP_NAME "音乐创作软件"
@@ -37,12 +37,9 @@ VIAddVersionKey "ProductVersion" "${APP_VERSION}"
 
 ; MUI 设置
 !define MUI_ABORTWARNING
-!define MUI_FINISHPAGE_RUN "$INSTDIR\node.exe"
-!define MUI_FINISHPAGE_RUN_PARAMETERS "start-installer.mjs"
-!define MUI_FINISHPAGE_RUN_WORKING_DIRECTORY "$INSTDIR"
-!define MUI_FINISHPAGE_SHOWREADME ""
+; 不自动启动——避免启动失败时窗口闪退，让用户手动双击桌面图标启动
 !define MUI_FINISHPAGE_TITLE "安装完成"
-!define MUI_FINISHPAGE_TEXT "安装完成！\n\n点击「完成」按钮将自动启动音乐创作软件，浏览器会自动打开。"
+!define MUI_FINISHPAGE_TEXT "安装完成！\n\n请点击「完成」按钮，然后双击桌面上的「音乐创作软件」图标启动软件。"
 
 ; 安装页面
 !insertmacro MUI_PAGE_WELCOME
@@ -68,6 +65,7 @@ Section "Install" SecInstall
   File "staging\node.exe"
   File "staging\start-installer.mjs"
   File "staging\server.mjs"
+  File "staging\启动音乐软件.bat"
 
   ; --- 前端构建产物 ---
   SetOutPath "$INSTDIR\dist"
@@ -95,10 +93,10 @@ Section "Install" SecInstall
   WriteRegStr HKCU "${APP_UNINST_KEY}" "Publisher" "${APP_PUBLISHER}"
   WriteRegStr HKCU "${APP_UNINST_KEY}" "InstallLocation" "$INSTDIR"
 
-  ; --- 桌面快捷方式 ---
+  ; --- 桌面快捷方式（指向 .bat，保证窗口不会闪退） ---
   CreateShortcut "$DESKTOP\${APP_NAME}.lnk" \
-    "$INSTDIR\node.exe" \
-    "start-installer.mjs" \
+    "$INSTDIR\启动音乐软件.bat" \
+    "" \
     "$INSTDIR\node.exe" \
     0 \
     "" \
@@ -108,8 +106,8 @@ Section "Install" SecInstall
   ; --- 开始菜单快捷方式 ---
   CreateDirectory "$SMPROGRAMS\${APP_NAME}"
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" \
-    "$INSTDIR\node.exe" \
-    "start-installer.mjs" \
+    "$INSTDIR\启动音乐软件.bat" \
+    "" \
     "$INSTDIR\node.exe" \
     0
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\卸载.lnk" \
@@ -120,9 +118,6 @@ Section "Install" SecInstall
 
   ; --- 卸载程序 ---
   WriteUninstaller "$INSTDIR\uninstall.exe"
-
-  ; --- 防火墙规则（允许 node.exe 监听端口） ---
-  ; 使用 user 权限不需要管理员
 
 SectionEnd
 
@@ -136,8 +131,8 @@ Section "Uninstall"
   Delete "$INSTDIR\node.exe"
   Delete "$INSTDIR\start-installer.mjs"
   Delete "$INSTDIR\server.mjs"
+  Delete "$INSTDIR\启动音乐软件.bat"
   Delete "$INSTDIR\uninstall.exe"
-  Delete "$INSTDIR\icon.ico"
 
   ; --- 删除目录 ---
   RMDir /r "$INSTDIR\dist"

@@ -28,14 +28,26 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
+console.log('='.repeat(50));
+console.log('  音乐创作软件正在启动...');
+console.log('  安装目录:', __dirname);
+console.log('='.repeat(50));
+console.log('');
+
 // 启动服务
 try {
   await import('./server.mjs');
 } catch (err) {
-  console.error('[启动失败]', err);
+  console.error('');
+  console.error('='.repeat(50));
+  console.error('  [启动失败]', err.message);
+  console.error('  ', err.stack?.split('\n').slice(0, 3).join('\n  '));
+  console.error('='.repeat(50));
+  console.error('');
+  console.error('  请截图此窗口发给开发者，然后按任意键关闭。');
   // Windows 下保持窗口不关闭，方便看错误
   if (process.platform === 'win32') {
-    console.error('\n按 Ctrl+C 关闭此窗口');
+    process.stdin.resume();
   }
   process.exit(1);
 }
@@ -43,7 +55,8 @@ try {
 // 3 秒后自动打开浏览器
 setTimeout(() => {
   const url = `http://localhost:${process.env.PORT || 3001}`;
-  console.log(`\n🌐 正在打开浏览器: ${url}`);
+  console.log(`\n  浏览器正在打开: ${url}`);
+  console.log('  如果没有自动打开，请手动复制上面的网址到浏览器。\n');
   if (process.platform === 'win32') {
     spawn('cmd', ['/c', 'start', url], { detached: true, stdio: 'ignore' }).unref();
   }
