@@ -29,17 +29,16 @@ Unicode True
 ; 版本信息
 VIProductVersion "1.0.0.0"
 VIAddVersionKey "ProductName" "${APP_NAME}"
-VIAddVersionKey "FileDescription" "${APP_NAME} 安装程序"
+VIAddVersionKey "FileDescription" "${APP_NAME} Setup"
 VIAddVersionKey "CompanyName" "${APP_PUBLISHER}"
-VIAddVersionKey "LegalCopyright" "© 2026 ${APP_PUBLISHER}"
+VIAddVersionKey "LegalCopyright" "C 2026 ${APP_PUBLISHER}"
 VIAddVersionKey "FileVersion" "${APP_VERSION}"
 VIAddVersionKey "ProductVersion" "${APP_VERSION}"
 
 ; MUI 设置
 !define MUI_ABORTWARNING
-; 不自动启动——避免启动失败时窗口闪退，让用户手动双击桌面图标启动
-!define MUI_FINISHPAGE_TITLE "安装完成"
-!define MUI_FINISHPAGE_TEXT "安装完成！\n\n请点击「完成」按钮，然后双击桌面上的「音乐创作软件」图标启动软件。"
+!define MUI_FINISHPAGE_TITLE "Setup Complete"
+!define MUI_FINISHPAGE_TEXT "Setup finished!\n\nDouble-click the '音乐创作软件' icon on your Desktop to start."
 
 ; 安装页面
 !insertmacro MUI_PAGE_WELCOME
@@ -65,7 +64,8 @@ Section "Install" SecInstall
   File "staging\node.exe"
   File "staging\start-installer.mjs"
   File "staging\server.mjs"
-  File "staging\启动音乐软件.bat"
+  File "staging\launch.bat"
+  File "staging\stop.bat"
 
   ; --- 前端构建产物 ---
   SetOutPath "$INSTDIR\dist"
@@ -93,24 +93,29 @@ Section "Install" SecInstall
   WriteRegStr HKCU "${APP_UNINST_KEY}" "Publisher" "${APP_PUBLISHER}"
   WriteRegStr HKCU "${APP_UNINST_KEY}" "InstallLocation" "$INSTDIR"
 
-  ; --- 桌面快捷方式（指向 .bat，保证窗口不会闪退） ---
+  ; --- 桌面快捷方式（指向 launch.bat，cmd 保证编码正确） ---
   CreateShortcut "$DESKTOP\${APP_NAME}.lnk" \
-    "$INSTDIR\启动音乐软件.bat" \
+    "$INSTDIR\launch.bat" \
     "" \
     "$INSTDIR\node.exe" \
     0 \
     "" \
     "" \
-    "双击启动音乐创作软件，浏览器会自动打开"
+    "Double-click to start Music Studio"
 
   ; --- 开始菜单快捷方式 ---
   CreateDirectory "$SMPROGRAMS\${APP_NAME}"
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" \
-    "$INSTDIR\启动音乐软件.bat" \
+    "$INSTDIR\launch.bat" \
     "" \
     "$INSTDIR\node.exe" \
     0
-  CreateShortcut "$SMPROGRAMS\${APP_NAME}\卸载.lnk" \
+  CreateShortcut "$SMPROGRAMS\${APP_NAME}\Stop.lnk" \
+    "$INSTDIR\stop.bat" \
+    "" \
+    "$INSTDIR\node.exe" \
+    0
+  CreateShortcut "$SMPROGRAMS\${APP_NAME}\Uninstall.lnk" \
     "$INSTDIR\uninstall.exe" \
     "" \
     "$INSTDIR\uninstall.exe" \
@@ -131,7 +136,8 @@ Section "Uninstall"
   Delete "$INSTDIR\node.exe"
   Delete "$INSTDIR\start-installer.mjs"
   Delete "$INSTDIR\server.mjs"
-  Delete "$INSTDIR\启动音乐软件.bat"
+  Delete "$INSTDIR\launch.bat"
+  Delete "$INSTDIR\stop.bat"
   Delete "$INSTDIR\uninstall.exe"
 
   ; --- 删除目录 ---
