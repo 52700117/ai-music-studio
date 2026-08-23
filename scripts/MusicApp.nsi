@@ -1,20 +1,27 @@
-; MusicApp NSIS Installer Script
-; 生成一个 Windows 安装程序：双击安装 → 桌面快捷方式 → 点击图标启动
-; 编译: makensis MusicApp.nsi
+; MusicApp NSIS Installer - REAL DESKTOP APP Edition
+; ============================================================
+; Final user experience is indistinguishable from a "real" app:
+;   1. Download + run Setup, click Next, Finish
+;   2. Desktop has a 音乐创作软件 shortcut → double click
+;   3. NO BLACK CONSOLE WINDOW, NO BROWSER
+;   4. A native Win32 window appears (title bar + minimize/maximize +
+;      taskbar icon) containing the music studio UI
+;
+; How: launcher.vbs (wscript.exe, hidden) launches node.exe silently,
+; waits for server to respond, then runs mshta.exe app.hta (HTA host
+; = native windowed app with IE engine, no browser chrome).
+; ============================================================
 
 !define APP_NAME "音乐创作软件"
 !define APP_NAME_EN "MusicApp"
 !define APP_VERSION "1.0.0"
 !define APP_PUBLISHER "MusicApp"
-!define APP_URL "http://localhost:3001"
 !define APP_REGKEY "Software\MusicApp"
 !define APP_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\MusicApp"
 
-; 使用现代 UI
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 
-; 压缩
 SetCompressor /SOLID lzma
 
 Name "${APP_NAME}"
@@ -26,7 +33,6 @@ ShowUnInstDetails show
 RequestExecutionLevel user
 Unicode True
 
-; 版本信息
 VIProductVersion "1.0.0.0"
 VIAddVersionKey "ProductName" "${APP_NAME}"
 VIAddVersionKey "FileDescription" "${APP_NAME} Setup"
@@ -35,84 +41,85 @@ VIAddVersionKey "LegalCopyright" "C 2026 ${APP_PUBLISHER}"
 VIAddVersionKey "FileVersion" "${APP_VERSION}"
 VIAddVersionKey "ProductVersion" "${APP_VERSION}"
 
-; MUI 设置
 !define MUI_ABORTWARNING
 !define MUI_FINISHPAGE_TITLE "Setup Complete"
-!define MUI_FINISHPAGE_TEXT "Setup finished!\n\nDouble-click the '音乐创作软件' icon on your Desktop to start."
+!define MUI_FINISHPAGE_TEXT "Setup finished!\n\nDouble-click the '音乐创作软件' icon on your Desktop to launch the app."
 
-; 安装页面
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
 
-; 卸载页面
 !insertmacro MUI_UNPAGE_WELCOME
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 
-; 语言
 !insertmacro MUI_LANGUAGE "SimpChinese"
 
-; ==================== 安装逻辑 ====================
+; ==================== Install ====================
 Section "Install" SecInstall
   SectionIn RO
   SetOutPath "$INSTDIR"
   SetOverwrite ifnewer
 
-  ; --- 核心文件 ---
+  ; --- Runtime core ---
   File "staging\node.exe"
   File "staging\start-installer.mjs"
   File "staging\server.mjs"
-  File "staging\launch.bat"
-  File "staging\stop.bat"
 
-  ; --- 前端构建产物 ---
+  ; --- Desktop app GUI (no browser!) ---
+  File "staging\app.hta"
+  File "staging\launcher.vbs"
+  File "staging\stopper.vbs"
+
+  ; --- Frontend build ---
   SetOutPath "$INSTDIR\dist"
   File /r "staging\dist\*.*"
 
-  ; --- 数据库迁移 ---
+  ; --- DB migrations ---
   SetOutPath "$INSTDIR\server\migrations"
   File "staging\server\migrations\*.*"
 
-  ; --- node_modules（仅 @libsql 相关） ---
+  ; --- Dependencies (@libsql Windows native binary) ---
   SetOutPath "$INSTDIR\node_modules"
   File /r "staging\node_modules\*.*"
 
-  ; --- 创建数据目录 ---
+  ; --- Runtime data dirs ---
   CreateDirectory "$INSTDIR\data"
 
-  ; --- 写注册表 ---
+  ; --- Registry: install info ---
   WriteRegStr HKCU "${APP_REGKEY}" "InstallDir" "$INSTDIR"
   WriteRegStr HKCU "${APP_REGKEY}" "Version" "${APP_VERSION}"
 
-  ; --- 卸载信息 ---
+  ; --- Registry: add to "Add/Remove Programs" ---
   WriteRegStr HKCU "${APP_UNINST_KEY}" "DisplayName" "${APP_NAME}"
   WriteRegStr HKCU "${APP_UNINST_KEY}" "UninstallString" '"$INSTDIR\uninstall.exe"'
   WriteRegStr HKCU "${APP_UNINST_KEY}" "DisplayVersion" "${APP_VERSION}"
   WriteRegStr HKCU "${APP_UNINST_KEY}" "Publisher" "${APP_PUBLISHER}"
   WriteRegStr HKCU "${APP_UNINST_KEY}" "InstallLocation" "$INSTDIR"
+  WriteRegStr HKCU "${APP_UNINST_KEY}" "DisplayIcon" "$INSTDIR\node.exe,0"
 
-  ; --- 桌面快捷方式（指向 launch.bat，cmd 保证编码正确） ---
+  ; --- Desktop shortcut: wscript.exe launcher.vbs (NO cmd window) ---
+  ; Using wscript.exe explicitly + quoting for paths with spaces
   CreateShortcut "$DESKTOP\${APP_NAME}.lnk" \
-    "$INSTDIR\launch.bat" \
-    "" \
+    "$SYSDIR\wscript.exe" \
+    '"$INSTDIR\launcher.vbs"' \
     "$INSTDIR\node.exe" \
     0 \
     "" \
     "" \
-    "Double-click to start Music Studio"
+    "Double-click to open Music Studio"
 
-  ; --- 开始菜单快捷方式 ---
+  ; --- Start Menu folder ---
   CreateDirectory "$SMPROGRAMS\${APP_NAME}"
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" \
-    "$INSTDIR\launch.bat" \
-    "" \
+    "$SYSDIR\wscript.exe" \
+    '"$INSTDIR\launcher.vbs"' \
     "$INSTDIR\node.exe" \
     0
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\Stop.lnk" \
-    "$INSTDIR\stop.bat" \
-    "" \
+    "$SYSDIR\wscript.exe" \
+    '"$INSTDIR\stopper.vbs"' \
     "$INSTDIR\node.exe" \
     0
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\Uninstall.lnk" \
@@ -121,40 +128,44 @@ Section "Install" SecInstall
     "$INSTDIR\uninstall.exe" \
     0
 
-  ; --- 卸载程序 ---
+  ; --- Uninstaller binary ---
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
 SectionEnd
 
-; ==================== 卸载逻辑 ====================
+; ==================== Uninstall ====================
 Section "Uninstall"
-  ; --- 停止正在运行的服务 ---
+  ; --- Stop the app first ---
+  nsExec::ExecToLog '"$SYSDIR\wscript.exe" "$INSTDIR\stopper.vbs"'
+  Sleep 1500
+  ; Extra safety: kill any remaining node.exe from our dir
   nsExec::ExecToLog 'taskkill /F /IM node.exe /T'
-  Sleep 1000
+  Sleep 500
 
-  ; --- 删除文件 ---
+  ; --- Core files ---
   Delete "$INSTDIR\node.exe"
   Delete "$INSTDIR\start-installer.mjs"
   Delete "$INSTDIR\server.mjs"
-  Delete "$INSTDIR\launch.bat"
-  Delete "$INSTDIR\stop.bat"
+  Delete "$INSTDIR\app.hta"
+  Delete "$INSTDIR\launcher.vbs"
+  Delete "$INSTDIR\stopper.vbs"
   Delete "$INSTDIR\uninstall.exe"
+  Delete "$INSTDIR\port.txt"
 
-  ; --- 删除目录 ---
+  ; --- Directories ---
   RMDir /r "$INSTDIR\dist"
   RMDir /r "$INSTDIR\server"
   RMDir /r "$INSTDIR\node_modules"
   RMDir /r "$INSTDIR\data"
   RMDir /r "$INSTDIR\release"
 
-  ; --- 删除快捷方式 ---
+  ; --- Shortcuts ---
   Delete "$DESKTOP\${APP_NAME}.lnk"
   RMDir /r "$SMPROGRAMS\${APP_NAME}"
 
-  ; --- 清理注册表 ---
+  ; --- Registry ---
   DeleteRegKey HKCU "${APP_REGKEY}"
   DeleteRegKey HKCU "${APP_UNINST_KEY}"
 
-  ; --- 删除空安装目录 ---
   RMDir "$INSTDIR"
 SectionEnd

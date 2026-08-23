@@ -301,4 +301,8 @@ if (IS_PROD) {
   })
 }
 
+// Expose BASE_DIR at runtime for server.ts / launchers to write port.txt
+// (Avoids needing extra imports in server.ts)
+;(app as any).BASE_DIR = BASE_DIR
+
 export default app
