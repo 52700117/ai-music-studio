@@ -77,10 +77,10 @@ const PACKAGES: PackageItem[] = [
 ]
 
 const STEPS = [
-  { num: 1, title: '下载安装程序', desc: '点击上方「Windows 一键安装版」下载按钮，获取安装程序。' },
+  { num: 1, title: '下载安装程序', desc: '点击上方「Windows 一键安装版」下载按钮，获取安装程序（约 24MB）。' },
   { num: 2, title: '双击安装', desc: '双击下载的安装程序，按提示完成安装（如提示 SmartScreen，点击「更多信息」→「仍要运行」）。' },
-  { num: 3, title: '桌面打开软件', desc: '安装完成后桌面会出现「音乐创作软件」图标，双击即可启动。' },
-  { num: 4, title: '开始创作', desc: '浏览器会自动打开 http://localhost:3001 ，登录后即可开始创作音乐！' },
+  { num: 3, title: '桌面打开软件', desc: '安装完成后桌面会出现「音乐创作软件」图标，双击即可启动软件窗口。' },
+  { num: 4, title: '开始创作', desc: '稍等几秒软件就会加载完成，注册登录后即可开始创作音乐！' },
 ]
 
 const FAQ = [
