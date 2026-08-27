@@ -6,7 +6,7 @@ nixPkgs = ['nodejs_20']
 cmds = ['npm install']
 
 [phases.build]
-cmds = ['npm run build']
+cmds = ['npx vite build']
 
 [start]
 cmd = 'npx tsx server/server.ts'
