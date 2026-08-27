@@ -4,7 +4,7 @@
  */
 import { type ReactNode, useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Music2, LayoutGrid, User, RefreshCw } from 'lucide-react'
+import { Music2, LayoutGrid, User, Download, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useStore } from '@/store/useStore'
 
@@ -12,6 +12,7 @@ const NAV = [
   { key: '/', label: '编辑', icon: Music2, desc: '创作与改编' },
   { key: '/plaza', label: '广场', icon: LayoutGrid, desc: '听别人的歌' },
   { key: '/profile', label: '我的', icon: User, desc: '登录与作品' },
+  { key: '/download', label: '下载', icon: Download, desc: '安装到电脑' },
 ]
 
 // 版本检查配置
