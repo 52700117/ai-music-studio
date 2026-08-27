@@ -6,7 +6,7 @@ import Editor from '@/pages/Editor'
 import Plaza from '@/pages/Plaza'
 import Profile from '@/pages/Profile'
 import Maintenance from '@/pages/Maintenance'
-import DownloadPage from '@/pages/DownloadPage'
+
 import AdminLogin from '@/pages/admin/AdminLogin'
 import AdminDashboard from '@/pages/admin/AdminDashboard'
 import { useStore } from '@/store/useStore'
@@ -119,7 +119,6 @@ function AppRoutes() {
           <Route path="/" element={<Editor />} />
           <Route path="/plaza" element={<Plaza />} />
           <Route path="/profile" element={<Profile />} />
-          <Route path="/download" element={<DownloadPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Shell>
