@@ -33,12 +33,9 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const IS_PKG = typeof (process as any).pkg !== 'undefined'
-const IS_INSTALLER = !!process.env.MUSIC_APP_INSTALL_DIR
 const EXEC_DIR = path.dirname(process.execPath)
 const SOURCE_ROOT = path.resolve(__dirname, '..')
-export const BASE_DIR = IS_INSTALLER
-  ? process.env.MUSIC_APP_INSTALL_DIR!
-  : IS_PKG ? path.join(EXEC_DIR, 'resources') : SOURCE_ROOT
+export const BASE_DIR = IS_PKG ? path.join(EXEC_DIR, 'resources') : SOURCE_ROOT
 
 dotenv.config()
 if (fs.existsSync(path.join(BASE_DIR, '.env'))) {
@@ -62,7 +59,6 @@ app.use('/api', async (req: Request, res: Response, next: NextFunction): Promise
     url === '/status' ||
     url === '/health' ||
     url === '/version' ||
-    url === '/dl-debug' ||
     url.startsWith('/admin')
   if (!isExempt) {
     const active = await getAppActive()
@@ -142,13 +138,13 @@ app.get('/api/version', (_req: Request, res: Response): void => {
  * - Railway 生产：Railway Volume 挂载的 /data/audio（MusicGen 生成的音频存这里）
  * - pkg 打包版：BASE_DIR/data/audio（exe 同级 resources/data/audio）
  */
-const PUBLIC_AUDIO_DIR = (IS_PKG || IS_INSTALLER)
+const PUBLIC_AUDIO_DIR = IS_PKG
   ? path.join(BASE_DIR, 'public', 'audio')
   : path.resolve(__dirname, '../public/audio')
 app.use('/audio', express.static(PUBLIC_AUDIO_DIR, { maxAge: '7d' }))
 const VOLUME_AUDIO_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH
   ? path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH, 'audio')
-  : (IS_PKG || IS_INSTALLER)
+  : IS_PKG
   ? path.join(BASE_DIR, 'data', 'audio')
   : path.resolve(__dirname, 'data/audio')
 if (fs.existsSync(VOLUME_AUDIO_DIR)) {
@@ -180,98 +176,6 @@ const IS_PROD = fs.existsSync(DIST_DIR) && fs.existsSync(path.join(DIST_DIR, 'in
 if (IS_PROD) {
   app.use(express.static(DIST_DIR, { maxAge: '1y', index: false }))
 }
-
-/**
- * 下载文件服务：/dl 路径暴露 release/ 目录，直链下载 Win/Mac 安装包
- * 支持三种运行形态，release 目录不存在时也不会报错（开发环境可以临时没包）
- */
-const RELEASE_DIR = (IS_PKG || IS_INSTALLER)
-  ? path.join(BASE_DIR, 'release')
-  : path.resolve(__dirname, '../release')
-
-// 调试接口：查看 release 目录内容
-app.get('/api/dl-debug', (_req: Request, res: Response): void => {
-  const exists = fs.existsSync(RELEASE_DIR)
-  const files = exists ? fs.readdirSync(RELEASE_DIR).map(f => {
-    const stat = fs.statSync(path.join(RELEASE_DIR, f))
-    return { name: f, size: stat.size, isFile: stat.isFile() }
-  }) : []
-  res.json({
-    releaseDir: RELEASE_DIR,
-    exists,
-    cwd: process.cwd(),
-    dirname: __dirname,
-    files,
-  })
-})
-
-if (fs.existsSync(RELEASE_DIR)) {
-  app.use('/dl', express.static(RELEASE_DIR, {
-    maxAge: '1d',
-    acceptRanges: true,
-    lastModified: true,
-    fallthrough: true, // 关键：static 找不到时把控制权交给后续中间件，而不是直接 next('route')
-    setHeaders: (res, filePath) => {
-      const low = filePath.toLowerCase()
-      // 对下载文件统一禁用 CDN/边缘的压缩改写和内容变换（Railway Hikari 可能自动压缩）
-      res.setHeader('Cache-Control', 'public, max-age=86400, no-transform')
-      res.setHeader('Vary', 'Accept-Encoding')
-
-      // zip 包强制下载（而不是在浏览器里打开）
-      if (low.endsWith('.zip')) {
-        const filename = path.basename(filePath)
-        // RFC 5987 兼容中文文件名（Chrome/QB/夸克 等不会因编码异常截断下载）
-        const safeAscii = filename.replace(/[^\x20-\x7E]/g, '_')
-        const utf8Encoded = encodeURIComponent(filename)
-        res.setHeader('Content-Type', 'application/zip')
-        res.setHeader(
-          'Content-Disposition',
-          `attachment; filename="${safeAscii}"; filename*=UTF-8''${utf8Encoded}`,
-        )
-        // 显式声明可预期的长度，避免代理/边缘节点在大文件 chunked 时提前断流
-        try {
-          const stat = fs.statSync(filePath)
-          if (stat.isFile()) res.setHeader('Content-Length', String(stat.size))
-        } catch {
-          /* ignore */
-        }
-      }
-      // md5 校验文件也作为纯文本下载
-      if (low.endsWith('.md5')) {
-        const filename = path.basename(filePath)
-        res.setHeader('Content-Type', 'text/plain; charset=utf-8')
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
-      }
-    },
-  }))
-}
-
-/**
- * /dl/* 兜底：文件不存在或 release 目录不存在时的错误处理
- * 必须写在 express.static 之后、SPA fallback 之前。
- *
- * 智能判断客户端类型：
- *   - 如果是浏览器直接下载 <a download> / 地址栏直链（Accept 包含 text/html 或无 X-Requested-With）：
- *     302 跳回 /download，并在 query 里带错误信息，这样前端可以显示友好提示，浏览器
- *     不会把 404/错误 JSON 作为 zip 保存（否则 Chrome 会显示"无法从网站上提取文件"）。
- *   - 其他（fetch/XHR/curl/API 调用）：返回 JSON 404，便于前端自行判断。
- */
-app.use('/dl', (req: Request, res: Response): void => {
-  const accept = String(req.headers.accept || '')
-  const xrw = String(req.headers['x-requested-with'] || '')
-  const filename = path.basename(req.path || '') || '安装包'
-  const viaBrowser = /html|xhtml/i.test(accept) || (xrw === '' && req.method === 'GET')
-  const file = encodeURIComponent(filename)
-  if (viaBrowser) {
-    res.redirect(302, `/download?dl_error=not_found&dl_file=${file}`)
-    return
-  }
-  res.status(404).json({
-    success: false,
-    error: '该安装包暂时未上传，请稍后重试或选择源码一键版。',
-    file: filename,
-  })
-})
 
 /**
  * 错误处理
