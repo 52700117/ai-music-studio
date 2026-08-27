@@ -261,10 +261,10 @@ export const api = {
       list: Array<{ id: number; content: string; resolved: boolean; createdAt: string; from: string }>
     }>('/api/admin/suggestions', { auth: 'admin' }),
 
-  adminToggleStatus: (active: boolean) =>
+  adminToggleStatus: (active: boolean, password?: string) =>
     request<{ success: boolean; active: boolean }>('/api/admin/toggle-status', {
       method: 'POST',
-      body: { active },
+      body: { active, ...(password ? { password } : {}) },
       auth: 'admin',
     }),
 
@@ -274,10 +274,10 @@ export const api = {
       auth: 'admin',
     }),
 
-  adminChangePassword: (oldPassword: string, newPassword: string) =>
+  adminChangePassword: (oldPassword: string, newPassword: string, oldName?: string, newName?: string) =>
     request<{ success: boolean }>('/api/admin/change-password', {
       method: 'POST',
-      body: { oldPassword, newPassword },
+      body: { oldPassword, newPassword, ...(oldName ? { oldName } : {}), ...(newName ? { newName } : {}) },
       auth: 'admin',
     }),
 

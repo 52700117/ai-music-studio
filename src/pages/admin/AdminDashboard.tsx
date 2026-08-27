@@ -7,7 +7,7 @@
  * - 代码编辑
  */
 import { useEffect, useState } from 'react'
-import { Shield, Users, Lightbulb, Power, Code, LogOut, Check, Music2, Eye, PauseCircle, PlayCircle, KeyRound, X } from 'lucide-react'
+import { Shield, Users, Lightbulb, Power, Code, LogOut, Check, Music2, Eye, PauseCircle, PlayCircle, KeyRound, X, UserCog } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import CodeEditorModal from './CodeEditorModal'
 import { api, setAdminToken } from '@/lib'
@@ -22,6 +22,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [codeOpen, setCodeOpen] = useState(false)
   const [pausingId, setPausingId] = useState<number | null>(null)
   const [pwdOpen, setPwdOpen] = useState(false)
+  const [pausePwdOpen, setPausePwdOpen] = useState(false)
 
   const loadStats = async () => {
     try {
@@ -50,12 +51,30 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
   const toggleStatus = async () => {
     if (!stats) return
+    // 暂停时需要密码确认，恢复时直接执行
+    if (stats.active) {
+      setPausePwdOpen(true)
+      return
+    }
     setToggling(true)
     try {
       const r = await api.adminToggleStatus(!stats.active)
       setStats((s) => s ? { ...s, active: r.active } : s)
     } catch { /* noop */ }
     finally { setToggling(false) }
+  }
+
+  const confirmPause = async (password: string): Promise<boolean> => {
+    setToggling(true)
+    try {
+      const r = await api.adminToggleStatus(false, password)
+      setStats((s) => s ? { ...s, active: r.active } : s)
+      return true
+    } catch (e: any) {
+      throw e
+    } finally {
+      setToggling(false)
+    }
   }
 
   const toggleUserPause = async (id: number, currentPaused: boolean) => {
@@ -93,7 +112,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             <Code size={14} /> 代码编辑
           </Button>
           <Button variant="outline" size="sm" onClick={() => setPwdOpen(true)}>
-            <KeyRound size={14} /> 修改密码
+            <UserCog size={14} /> 修改名称和密码
           </Button>
           <Button variant="ghost" size="sm" onClick={doLogout}>
             <LogOut size={14} /> 退出
@@ -235,14 +254,17 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
       <CodeEditorModal open={codeOpen} onClose={() => setCodeOpen(false)} />
       <ChangePasswordModal open={pwdOpen} onClose={() => setPwdOpen(false)} />
+      <PauseConfirmModal open={pausePwdOpen} onClose={() => setPausePwdOpen(false)} onConfirm={confirmPause} loading={toggling} />
     </div>
   )
 }
 
 /**
- * 修改密码弹窗
+ * 修改名称和密码弹窗
  */
 function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [oldName, setOldName] = useState('')
+  const [newName, setNewName] = useState('')
   const [oldPwd, setOldPwd] = useState('')
   const [newPwd, setNewPwd] = useState('')
   const [confirmPwd, setConfirmPwd] = useState('')
@@ -252,6 +274,8 @@ function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => 
 
   useEffect(() => {
     if (!open) {
+      setOldName('')
+      setNewName('')
       setOldPwd('')
       setNewPwd('')
       setConfirmPwd('')
@@ -264,7 +288,7 @@ function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => 
   const submit = async () => {
     setError('')
     if (!oldPwd || !newPwd || !confirmPwd) {
-      setError('请填写完整')
+      setError('请填写密码相关字段')
       return
     }
     if (newPwd.length < 6) {
@@ -277,7 +301,7 @@ function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => 
     }
     setLoading(true)
     try {
-      await api.adminChangePassword(oldPwd, newPwd)
+      await api.adminChangePassword(oldPwd, newPwd, oldName || undefined, newName || undefined)
       setDone(true)
     } catch (e: any) {
       setError(e.message || '修改失败')
@@ -296,7 +320,7 @@ function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => 
       >
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-display text-lg font-semibold flex items-center gap-2">
-            <KeyRound size={18} /> 修改管理员密码
+            <UserCog size={18} /> 修改名称和密码
           </h3>
           <button onClick={onClose} className="text-muted hover:text-ink">
             <X size={18} />
@@ -308,12 +332,32 @@ function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => 
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-forest/10 text-forest mb-3">
               <Check size={24} />
             </div>
-            <div className="font-medium">密码修改成功</div>
-            <div className="text-xs text-muted mt-1">下次登录请使用新密码</div>
+            <div className="font-medium">修改成功</div>
+            <div className="text-xs text-muted mt-1">下次登录请使用新名称和密码</div>
             <Button className="mt-4 w-full" onClick={onClose}>完成</Button>
           </div>
         ) : (
           <div className="space-y-3">
+            <div>
+              <label className="block text-xs text-muted mb-1">原名称（不修改则留空）</label>
+              <input
+                type="text"
+                value={oldName}
+                onChange={(e) => setOldName(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-line bg-paper text-sm focus:outline-none focus:border-ink"
+                placeholder="输入当前管理员名称"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-muted mb-1">新名称（不修改则留空）</label>
+              <input
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-line bg-paper text-sm focus:outline-none focus:border-ink"
+                placeholder="输入新的管理员名称"
+              />
+            </div>
             <div>
               <label className="block text-xs text-muted mb-1">原密码</label>
               <input
@@ -351,6 +395,80 @@ function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => 
             </Button>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * 暂停软件密码确认弹窗
+ */
+function PauseConfirmModal({ open, onClose, onConfirm, loading }: {
+  open: boolean
+  onClose: () => void
+  onConfirm: (password: string) => Promise<boolean>
+  loading: boolean
+}) {
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!open) {
+      setPassword('')
+      setError('')
+    }
+  }, [open])
+
+  const submit = async () => {
+    setError('')
+    if (!password) {
+      setError('请输入管理员密码')
+      return
+    }
+    try {
+      await onConfirm(password)
+      onClose()
+    } catch (e: any) {
+      setError(e.message || '密码错误')
+    }
+  }
+
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="bg-paper rounded-2xl shadow-xl w-[90%] max-w-sm p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-display text-lg font-semibold flex items-center gap-2">
+            <Power size={18} /> 确认暂停软件
+          </h3>
+          <button onClick={onClose} className="text-muted hover:text-ink">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="text-sm text-muted mb-4">
+          暂停后用户将无法访问软件，请输入管理员密码确认操作。
+        </div>
+        <div className="space-y-3">
+          <div>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-line bg-paper text-sm focus:outline-none focus:border-ink"
+              placeholder="请输入管理员密码"
+              onKeyDown={(e) => e.key === 'Enter' && submit()}
+              autoFocus
+            />
+          </div>
+          {error && <div className="text-xs text-danger">{error}</div>}
+          <Button variant="danger" className="w-full" onClick={submit} loading={loading}>
+            确认暂停
+          </Button>
+        </div>
       </div>
     </div>
   )

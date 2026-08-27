@@ -66,12 +66,29 @@ router.get('/status', requireAdmin, async (_req: Request, res: Response): Promis
 
 /**
  * 暂停 / 恢复软件
+ * 暂停时需要验证管理员密码
  */
 router.post('/toggle-status', requireAdmin, async (req: Request, res: Response): Promise<void> => {
-  const { active } = req.body || {}
+  const { active, password } = req.body || {}
   if (typeof active !== 'boolean') {
     res.status(400).json({ success: false, error: '参数错误' })
     return
+  }
+  // 暂停时需要密码验证
+  if (active === false) {
+    if (!password) {
+      res.status(400).json({ success: false, error: '请输入管理员密码' })
+      return
+    }
+    const adminId = (req as any).admin.id as number
+    const result = await db.execute({
+      sql: 'SELECT id FROM admin WHERE id = ? AND password_hash = ?',
+      args: [adminId, password],
+    })
+    if (!result.rows[0]) {
+      res.status(401).json({ success: false, error: '管理员密码错误' })
+      return
+    }
   }
   await setAppActive(active)
   res.json({ success: true, active: await getAppActive() })
@@ -164,11 +181,11 @@ router.post('/suggestions/:id/resolve', requireAdmin, async (req: Request, res: 
 })
 
 /**
- * 修改管理员密码
+ * 修改管理员名称和密码
  */
 router.post('/change-password', requireAdmin, async (req: Request, res: Response): Promise<void> => {
   const adminId = (req as any).admin.id as number
-  const { oldPassword, newPassword } = req.body || {}
+  const { oldPassword, newPassword, oldName, newName } = req.body || {}
   if (!oldPassword || !newPassword) {
     res.status(400).json({ success: false, error: '请输入完整' })
     return
@@ -178,17 +195,30 @@ router.post('/change-password', requireAdmin, async (req: Request, res: Response
     return
   }
   const result = await db.execute({
-    sql: 'SELECT id FROM admin WHERE id = ? AND password_hash = ?',
+    sql: 'SELECT id, username FROM admin WHERE id = ? AND password_hash = ?',
     args: [adminId, oldPassword],
   })
   if (!result.rows[0]) {
     res.status(401).json({ success: false, error: '原密码错误' })
     return
   }
-  await db.execute({
-    sql: 'UPDATE admin SET password_hash = ? WHERE id = ?',
-    args: [newPassword, adminId],
-  })
+  // 修改名称（如果提供了原名称和新名称）
+  if (oldName && newName) {
+    const admin = result.rows[0] as any
+    if (admin.username !== oldName) {
+      res.status(400).json({ success: false, error: '原名称不正确' })
+      return
+    }
+    await db.execute({
+      sql: 'UPDATE admin SET password_hash = ?, username = ? WHERE id = ?',
+      args: [newPassword, newName, adminId],
+    })
+  } else {
+    await db.execute({
+      sql: 'UPDATE admin SET password_hash = ? WHERE id = ?',
+      args: [newPassword, adminId],
+    })
+  }
   res.json({ success: true })
 })
 
