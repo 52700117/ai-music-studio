@@ -112,7 +112,7 @@ export default function Editor() {
         mode: apiMode as AudioSeed['mode'],
         voice: (mode === 'lyrics' || mode === 'original') ? voice : undefined,
         prompt: combinedPrompt,
-        lyrics: lyricsMode === 'ai' ? (aiLyricsReq.trim() || prompt.trim()) : (lyricsText.trim() || undefined),
+        lyrics: lyricsMode === 'ai' ? undefined : (lyricsText.trim() || undefined),
         durationSec: duration,
       }
       // 轮询进度
