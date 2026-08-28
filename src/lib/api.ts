@@ -227,6 +227,8 @@ export const api = {
 
   shareCreation: (id: number) =>
     request<{ success: boolean; plazaId: number }>(`/api/creations/${id}/share`, { method: 'POST' }),
+  deleteCreation: (id: number) =>
+    request<{ success: boolean }>(`/api/creations/${id}`, { method: 'DELETE' }),
 
   plaza: () => request<{ success: boolean; list: PlazaSong[] }>('/api/plaza', { auth: 'none' }),
 

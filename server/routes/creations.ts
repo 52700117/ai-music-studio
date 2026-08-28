@@ -354,4 +354,38 @@ router.post('/:id/share', requireUser, async (req: Request, res: Response): Prom
   res.json({ success: true, plazaId: Number(info.lastInsertRowid) })
 })
 
+/**
+ * 删除自己的创作
+ * DELETE /api/creations/:id
+ */
+router.delete('/:id', requireUser, async (req: Request, res: Response): Promise<void> => {
+  await ensureInitialized()
+  const userId = (req as any).user.id
+  const id = Number(req.params.id)
+  if (!id || Number.isNaN(id)) {
+    res.status(400).json({ success: false, error: '无效的作品 ID' })
+    return
+  }
+  const existing = await db.execute({
+    sql: 'SELECT id, audio_url FROM creation WHERE id = ? AND user_id = ?',
+    args: [id, userId],
+  })
+  if (existing.rows.length === 0) {
+    res.status(404).json({ success: false, error: '作品不存在' })
+    return
+  }
+  const row = existing.rows[0] as any
+  await db.execute({ sql: 'DELETE FROM plaza_song WHERE creation_id = ?', args: [id] })
+  await db.execute({ sql: 'DELETE FROM creation WHERE id = ? AND user_id = ?', args: [id, userId] })
+  if (row.audio_url && row.audio_url.startsWith('/audio/')) {
+    try {
+      const fs = await import('fs')
+      const fp = await import('path')
+      const abs = fp.join(process.cwd(), 'server', row.audio_url)
+      if (fs.existsSync(abs)) fs.unlinkSync(abs)
+    } catch { /* noop */ }
+  }
+  res.json({ success: true })
+})
+
 export default router

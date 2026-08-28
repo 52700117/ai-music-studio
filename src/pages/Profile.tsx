@@ -5,7 +5,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   User, LogOut, Search, Music2, History, Settings, Lock, Send, Check,
-  Download, Share2, Play, Loader2, Edit3, ChevronRight, X, Sparkles, Phone,
+  Download, Share2, Play, Loader2, Edit3, ChevronRight, X, Sparkles, Phone, Trash2,
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
@@ -145,6 +145,16 @@ export default function Profile() {
       }
     }
   }
+  const deleteCreation = async (c: Creation) => {
+    if (!confirm(`确定删除《${c.title}》吗？此操作不可恢复。`)) return
+    try {
+      await api.deleteCreation(c.id)
+      await loadCreations()
+      await loadPlaza()
+    } catch (e: any) {
+      alert(e.message || '删除失败')
+    }
+  }
 
   if (!user) return <LoginView onDone={() => loadUser()} />
 
@@ -227,7 +237,7 @@ export default function Profile() {
           onSearch={setSearch}
           onPlay={playCreation}
           onDownload={downloadCreation}
-          onShare={shareCreation}
+          onShare={shareCreation} onDelete={deleteCreation}
           emptyText="还没有作品"
           onGoCreate={() => nav('/')}
           user={user}
@@ -240,7 +250,7 @@ export default function Profile() {
           onSearch={setSearch}
           onPlay={playCreation}
           onDownload={downloadCreation}
-          onShare={shareCreation}
+          onShare={shareCreation} onDelete={deleteCreation}
           showStatus
           emptyText="还没有创作历史"
           onGoCreate={() => nav('/')}
@@ -325,7 +335,7 @@ export default function Profile() {
 
 /* ==================== 创作列表组件 ==================== */
 function CreationList({
-  items, search, onSearch, onPlay, onDownload, onShare, showStatus, emptyText, onGoCreate,
+  items, search, onSearch, onPlay, onDownload, onShare, onDelete, showStatus, emptyText, onGoCreate,
 }: {
   items: Creation[]
   search: string
@@ -333,6 +343,7 @@ function CreationList({
   onPlay: (c: Creation) => void
   onDownload: (c: Creation) => void
   onShare: (c: Creation) => void
+  onDelete: (c: Creation) => void
   showStatus?: boolean
   emptyText: string
   onGoCreate: () => void
@@ -378,7 +389,7 @@ function CreationList({
               creation={c}
               onPlay={onPlay}
               onDownload={onDownload}
-              onShare={onShare}
+              onShare={onShare} onDelete={onDelete}
               showStatus={showStatus}
             />
           ))}
@@ -389,12 +400,13 @@ function CreationList({
 }
 
 function CreationRow({
-  creation: c, onPlay, onDownload, onShare, showStatus,
+  creation: c, onPlay, onDownload, onShare, onDelete, showStatus,
 }: {
   creation: Creation
   onPlay: (c: Creation) => void
   onDownload: (c: Creation) => void
   onShare: (c: Creation) => void
+  onDelete: (c: Creation) => void
   showStatus?: boolean
 }) {
   const isProcessing = c.status === 'processing'
@@ -443,6 +455,9 @@ function CreationRow({
           </button>
           <button onClick={() => onShare(c)} title="分享" className="w-9 h-9 rounded-full flex items-center justify-center text-muted hover:bg-coral/10 hover:text-coral transition-colors">
             <Share2 size={15} />
+          </button>
+          <button onClick={() => onDelete(c)} title="删除" className="w-9 h-9 rounded-full flex items-center justify-center text-muted hover:bg-red-50 hover:text-red-500 transition-colors">
+            <Trash2 size={15} />
           </button>
         </div>
       ) : (
