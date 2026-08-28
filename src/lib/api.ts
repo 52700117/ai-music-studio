@@ -193,6 +193,19 @@ export const api = {
       body: { oldPassword, newPassword },
     }),
 
+  sendSmsCode: (phone: string) =>
+    request<{ success: boolean; devMode?: boolean; hint?: string }>('/api/auth/sms/send', {
+      method: 'POST',
+      body: { phone },
+      auth: 'none',
+    }),
+
+  bindPhone: (phone: string, code: string) =>
+    request<{ success: boolean; phoneMasked: string }>('/api/auth/bind-phone', {
+      method: 'POST',
+      body: { phone, code },
+    }),
+
   createCreation: (body: {
     mode: string
     prompt?: string

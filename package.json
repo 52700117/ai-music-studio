@@ -62,13 +62,14 @@
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.3.0",
     "tailwind-merge": "^3.0.2",
+    "tencentcloud-sdk-nodejs-sms": "^4.1.240",
     "tsx": "^4.20.3",
     "zustand": "^5.0.3"
   },
   "devDependencies": {
+    "@capacitor/android": "^6.1.2",
     "@capacitor/cli": "^6.1.2",
     "@capacitor/core": "^6.1.2",
-    "@capacitor/android": "^6.1.2",
     "@capacitor/ios": "^6.1.2",
     "@eslint/js": "^9.25.0",
     "@tauri-apps/cli": "^2.1.0",

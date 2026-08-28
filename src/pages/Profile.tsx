@@ -5,7 +5,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   User, LogOut, Search, Music2, History, Settings, Lock, Send, Check,
-  Download, Share2, Play, Loader2, Edit3, ChevronRight, X, Sparkles,
+  Download, Share2, Play, Loader2, Edit3, ChevronRight, X, Sparkles, Phone,
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
@@ -464,6 +464,7 @@ function PersonalInfo({ user, onUpdate }: { user: any; onUpdate: () => Promise<v
   const [gender, setGender] = useState(user.gender || '')
   const [avatar, setAvatar] = useState(user.avatar || '')
   const [saving, setSaving] = useState(false)
+  const [phoneModalOpen, setPhoneModalOpen] = useState(false)
 
   const save = async () => {
     setSaving(true)
@@ -493,12 +494,8 @@ function PersonalInfo({ user, onUpdate }: { user: any; onUpdate: () => Promise<v
     reader.readAsDataURL(file)
   }
 
-  const bindPhone = () => {
-    alert('绑定手机号功能开发中')
-  }
-  const bindWechat = () => {
-    alert('绑定微信功能开发中')
-  }
+  const bindPhone = () => setPhoneModalOpen(true)
+  const bindWechat = () => alert('绑定微信功能开发中')
 
   return (
     <div className="max-w-2xl">
@@ -638,6 +635,15 @@ function PersonalInfo({ user, onUpdate }: { user: any; onUpdate: () => Promise<v
           </button>
         </div>
       </div>
+
+      {/* 绑定手机号弹窗 */}
+      {phoneModalOpen && (
+        <BindPhoneModal
+          currentPhone={user.phoneMasked}
+          onClose={() => setPhoneModalOpen(false)}
+          onBound={async () => { await onUpdate(); setPhoneModalOpen(false) }}
+        />
+      )}
     </div>
   )
 }
@@ -760,6 +766,141 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
           </Button>
           <Button variant="primary" block loading={loading} onClick={handleSubmit}>
             确认修改
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+/* ==================== 绑定手机号弹窗 ==================== */
+function BindPhoneModal({
+  currentPhone, onClose, onBound,
+}: {
+  currentPhone?: string
+  onClose: () => void
+  onBound: () => Promise<void>
+}) {
+  const [phone, setPhone] = useState('')
+  const [code, setCode] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [countdown, setCountdown] = useState(0)
+  const [devHint, setDevHint] = useState('')
+
+  // 倒计时
+  useEffect(() => {
+    if (countdown <= 0) return
+    const t = setTimeout(() => setCountdown(countdown - 1), 1000)
+    return () => clearTimeout(t)
+  }, [countdown])
+
+  const handleSendCode = async () => {
+    if (!phone || !/^1[3-9]\d{9}$/.test(phone)) {
+      alert('请输入正确的手机号')
+      return
+    }
+    setSending(true)
+    try {
+      const r = await api.sendSmsCode(phone)
+      if (r.devMode) {
+        setDevHint(r.hint || '开发模式：验证码为 123456')
+      } else {
+        setDevHint('')
+      }
+      setCountdown(60)
+    } catch (e: any) {
+      alert(e.message || '发送失败')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const handleBind = async () => {
+    if (!phone || !/^1[3-9]\d{9}$/.test(phone)) {
+      alert('请输入正确的手机号')
+      return
+    }
+    if (!code) {
+      alert('请输入验证码')
+      return
+    }
+    setLoading(true)
+    try {
+      await api.bindPhone(phone, code)
+      alert(currentPhone ? '手机号更换成功' : '手机号绑定成功')
+      await onBound()
+    } catch (e: any) {
+      alert(e.message || '绑定失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Modal open onClose={() => { if (!loading) onClose() }} size="sm">
+      <div className="p-7">
+        <h3 className="font-display text-xl font-semibold mb-1">
+          {currentPhone ? '更换手机号' : '绑定手机号'}
+        </h3>
+        <p className="text-sm text-muted mb-5">
+          {currentPhone ? `当前：${currentPhone}` : '绑定后可通过手机号找回账号'}
+        </p>
+
+        <div className="space-y-4">
+          {/* 手机号输入 */}
+          <div>
+            <label className="block text-xs text-muted mb-1.5">手机号</label>
+            <div className="relative">
+              <Phone size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
+              <input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                placeholder="请输入手机号"
+                className="focus-coral w-full rounded-xl border border-line bg-cream/40 pl-10 pr-4 py-2.5 text-sm"
+              />
+            </div>
+          </div>
+
+          {/* 验证码输入 + 发送按钮 */}
+          <div>
+            <label className="block text-xs text-muted mb-1.5">验证码</label>
+            <div className="flex gap-2">
+              <input
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="6 位验证码"
+                className="focus-coral flex-1 rounded-xl border border-line bg-cream/40 px-4 py-2.5 text-sm"
+              />
+              <button
+                onClick={handleSendCode}
+                disabled={countdown > 0 || sending || !phone}
+                className={cn(
+                  'px-4 rounded-xl text-sm font-medium whitespace-nowrap transition-colors',
+                  countdown > 0 || sending
+                    ? 'bg-cream text-muted cursor-not-allowed'
+                    : 'bg-ink text-paper hover:opacity-90',
+                )}
+              >
+                {sending ? '发送中…' : countdown > 0 ? `${countdown}s` : '获取验证码'}
+              </button>
+            </div>
+          </div>
+
+          {/* 开发模式提示 */}
+          {devHint && (
+            <div className="p-3 rounded-xl bg-amber-50 text-amber-700 text-xs flex items-center gap-2">
+              <Check size={14} /> {devHint}
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-3 mt-6">
+          <Button variant="outline" block onClick={onClose} disabled={loading}>
+            取消
+          </Button>
+          <Button variant="primary" block loading={loading} onClick={handleBind}>
+            {currentPhone ? '确认更换' : '确认绑定'}
           </Button>
         </div>
       </div>

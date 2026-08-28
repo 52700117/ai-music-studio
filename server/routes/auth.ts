@@ -6,6 +6,7 @@ import { Router, type Request, type Response } from 'express'
 import { db, ensureInitialized } from '../db.js'
 import { encrypt, maskPhone, maskNickname, hashPassword, verifyPassword } from '../lib/crypto.js'
 import { createToken, verifyToken } from '../lib/auth.js'
+import { sendSmsCode, isSmsEnabled } from '../lib/tencentSms.js'
 
 const router = Router()
 
@@ -394,6 +395,133 @@ router.post('/change-password', async (req, res): Promise<void> => {
   })
 
   res.json({ success: true })
+})
+
+/* ==================== 短信验证码 ==================== */
+
+/**
+ * 内存存储验证码：Map<phone, { code, expiresAt, sentAt }>
+ * 5分钟过期，60秒内不可重复发送
+ */
+const smsStore = new Map<string, { code: string; expiresAt: number; sentAt: number }>()
+
+/**
+ * 发送短信验证码
+ * POST /api/auth/sms/send
+ * body: { phone: "13800138000" }
+ */
+router.post('/sms/send', async (req: Request, res: Response): Promise<void> => {
+  const { phone } = (req.body || {}) as { phone?: string }
+
+  if (!phone || !/^1[3-9]\d{9}$/.test(phone)) {
+    res.status(400).json({ success: false, error: '请输入正确的手机号' })
+    return
+  }
+
+  // 频率限制：60秒内不可重复发送
+  const existing = smsStore.get(phone)
+  if (existing && Date.now() - existing.sentAt < 60_000) {
+    const waitSec = Math.ceil((60_000 - (Date.now() - existing.sentAt)) / 1000)
+    res.status(429).json({ success: false, error: `发送太频繁，请 ${waitSec} 秒后再试` })
+    return
+  }
+
+  // 生成6位验证码
+  const code = String(Math.floor(100000 + Math.random() * 900000))
+  const sentAt = Date.now()
+  const expiresAt = sentAt + 5 * 60 * 1000 // 5分钟有效
+
+  // 发送短信
+  if (isSmsEnabled()) {
+    const ok = await sendSmsCode(phone, code)
+    if (!ok) {
+      res.status(500).json({ success: false, error: '短信发送失败，请稍后重试' })
+      return
+    }
+  } else {
+    // 开发模式：未配置短信服务，验证码固定为 123456
+    console.warn(`[sms] 开发模式：验证码为 123456（短信服务未配置）`)
+  }
+
+  smsStore.set(phone, { code, expiresAt, sentAt })
+
+  // 告知前端是否为开发模式
+  const devMode = !isSmsEnabled()
+  res.json({
+    success: true,
+    devMode,
+    ...(devMode ? { hint: '短信服务未配置，验证码为 123456' } : {}),
+  })
+})
+
+/**
+ * 校验验证码（内部函数）
+ */
+function verifySmsCode(phone: string, code: string): boolean {
+  const record = smsStore.get(phone)
+  if (!record) return false
+  if (Date.now() > record.expiresAt) {
+    smsStore.delete(phone)
+    return false
+  }
+  // 开发模式固定码
+  if (!isSmsEnabled() && code === '123456') return true
+  if (record.code !== code) return false
+  // 用完即删
+  smsStore.delete(phone)
+  return true
+}
+
+/**
+ * 绑定/更换手机号
+ * POST /api/auth/bind-phone
+ * body: { phone, code }
+ */
+router.post('/bind-phone', async (req: Request, res: Response): Promise<void> => {
+  const auth = req.headers.authorization?.replace('Bearer ', '')
+  const payload = verifyToken(auth)
+  if (!payload || payload.role !== 'user') {
+    res.status(401).json({ success: false, error: '未登录' })
+    return
+  }
+  await ensureInitialized()
+
+  const { phone, code } = (req.body || {}) as { phone?: string; code?: string }
+
+  if (!phone || !/^1[3-9]\d{9}$/.test(phone)) {
+    res.status(400).json({ success: false, error: '请输入正确的手机号' })
+    return
+  }
+  if (!code) {
+    res.status(400).json({ success: false, error: '请输入验证码' })
+    return
+  }
+  if (!verifySmsCode(phone, code)) {
+    res.status(400).json({ success: false, error: '验证码错误或已过期' })
+    return
+  }
+
+  // 检查手机号是否被其他用户绑定
+  const phoneEncrypted = encrypt(phone)
+  const existing = await db.execute({
+    sql: 'SELECT id FROM user WHERE phone_encrypted = ? AND id != ?',
+    args: [phoneEncrypted, payload.id],
+  })
+  if (existing.rows.length > 0) {
+    res.status(409).json({ success: false, error: '该手机号已被其他账号绑定' })
+    return
+  }
+
+  const masked = maskPhone(phone)
+  await db.execute({
+    sql: 'UPDATE user SET phone_encrypted = ?, phone_masked = ? WHERE id = ?',
+    args: [phoneEncrypted, masked, payload.id],
+  })
+
+  res.json({
+    success: true,
+    phoneMasked: masked,
+  })
 })
 
 export default router
