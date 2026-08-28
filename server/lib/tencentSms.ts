@@ -10,7 +10,8 @@
  *
  * 如果环境变量未配置，sendSmsCode 返回 false（降级到开发模式）
  */
-import { SmsClient } from 'tencentcloud-sdk-nodejs-sms'
+import tencentSms from 'tencentcloud-sdk-nodejs-sms'
+const SmsClientClass = tencentSms.sms.v20210111.Client
 
 let client: any = null
 
