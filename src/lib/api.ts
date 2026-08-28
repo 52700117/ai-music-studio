@@ -230,6 +230,15 @@ export const api = {
   deleteCreation: (id: number) =>
     request<{ success: boolean }>(`/api/creations/${id}`, { method: 'DELETE' }),
 
+  trashCreations: () =>
+    request<{ success: boolean; list: any[]; retentionDays: number }>('/api/creations/mine/trash'),
+
+  restoreCreation: (id: number) =>
+    request<{ success: boolean }>(`/api/creations/${id}/restore`, { method: 'POST' }),
+
+  purgeCreation: (id: number) =>
+    request<{ success: boolean }>(`/api/creations/${id}/purge`, { method: 'DELETE' }),
+
   plaza: () => request<{ success: boolean; list: PlazaSong[] }>('/api/plaza', { auth: 'none' }),
 
   plazaPlay: (id: number) => request<{ success: boolean }>(`/api/plaza/${id}/play`, { method: 'POST', auth: 'none' }),

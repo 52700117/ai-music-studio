@@ -38,6 +38,7 @@ export default function Profile() {
   const [suggestLoading, setSuggestLoading] = useState(false)
   const [pwdModalOpen, setPwdModalOpen] = useState(false)
   const [suggestModalOpen, setSuggestModalOpen] = useState(false)
+  const [trashOpen, setTrashOpen] = useState(false)
 
   const loadCreations = async () => {
     if (!user) return
@@ -211,6 +212,14 @@ export default function Profile() {
                 <Icon size={14} /> {label}
               </button>
             ))}
+            {tab === 'history' && (
+              <button
+                onClick={() => setTrashOpen(true)}
+                className="ml-1 px-3 py-2 text-xs text-muted hover:text-coral hover:bg-cream rounded-xl flex items-center gap-1 transition-colors"
+              >
+                <Trash2 size={13} /> 回收站（30天可恢复）
+              </button>
+            )}
           </div>
 
           {/* 右侧功能按钮 */}
@@ -328,6 +337,14 @@ export default function Profile() {
             )}
           </div>
         </Modal>
+      )}
+
+      {/* 回收站弹窗 */}
+      {trashOpen && (
+        <TrashModal
+          onClose={() => setTrashOpen(false)}
+          onChanged={() => loadCreations()}
+        />
       )}
     </div>
   )
@@ -1025,5 +1042,126 @@ function LoginView({ onDone }: { onDone: () => void }) {
         </button>
       </div>
     </div>
+  )
+}
+
+/* ==================== 回收站弹窗 ==================== */
+function TrashModal({
+  onClose, onChanged,
+}: {
+  onClose: () => void
+  onChanged: () => void
+}) {
+  const [items, setItems] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const r = await api.trashCreations()
+      setItems(r.list)
+    } catch (e: any) {
+      alert(e.message || '加载失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  const restore = async (id: number) => {
+    try {
+      await api.restoreCreation(id)
+      await load()
+      await onChanged()
+    } catch (e: any) {
+      alert(e.message || '恢复失败')
+    }
+  }
+
+  const purge = async (id: number, title: string) => {
+    if (!confirm(`确定彻底删除《${title}》吗？无法恢复！`)) return
+    try {
+      await api.purgeCreation(id)
+      await load()
+      await onChanged()
+    } catch (e: any) {
+      alert(e.message || '删除失败')
+    }
+  }
+
+  const purgeAll = async () => {
+    if (!confirm(`确定清空回收站吗？所有作品将彻底删除，无法恢复！`)) return
+    for (const it of items) {
+      try { await api.purgeCreation(it.id) } catch { /* skip */ }
+    }
+    await load()
+    await onChanged()
+  }
+
+  // 计算剩余天数
+  const daysLeft = (deletedAt: string) => {
+    const del = new Date(deletedAt).getTime()
+    const diff = 30 * 86400 * 1000 - (Date.now() - del)
+    if (diff <= 0) return 0
+    return Math.ceil(diff / 86400000)
+  }
+
+  return (
+    <Modal open onClose={onClose} size="md">
+      <div className="p-7">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-display text-xl font-semibold flex items-center gap-2">
+            <Trash2 size={20} className="text-muted" /> 回收站
+          </h3>
+          {items.length > 0 && (
+            <button
+              onClick={purgeAll}
+              className="text-xs text-red-500 hover:text-red-600 hover:underline"
+            >
+              清空全部
+            </button>
+          )}
+        </div>
+        <p className="text-sm text-muted mb-4">删除的作品保留 30 天，过期后自动彻底删除</p>
+
+        {loading ? (
+          <div className="text-center py-12 text-muted text-sm">加载中…</div>
+        ) : items.length === 0 ? (
+          <div className="text-center py-12 text-muted text-sm">
+            <Trash2 size={32} className="mx-auto mb-3 opacity-30" />
+            回收站是空的
+          </div>
+        ) : (
+          <div className="divide-y divide-line max-h-[50vh] overflow-y-auto -mx-2 px-2">
+            {items.map((it: any) => (
+              <div key={it.id} className="py-3 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-coral/10 flex items-center justify-center flex-shrink-0">
+                  <Music2 size={16} className="text-coral" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{it.title}</div>
+                  <div className="text-xs text-muted mt-0.5">
+                    删除于 {it.deletedAt?.replace('T', ' ').slice(0, 16)} · 还剩 {daysLeft(it.deletedAt)} 天
+                  </div>
+                </div>
+                <button
+                  onClick={() => restore(it.id)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-ink text-paper hover:opacity-90 transition-opacity"
+                >
+                  恢复
+                </button>
+                <button
+                  onClick={() => purge(it.id, it.title)}
+                  className="px-3 py-1.5 rounded-lg text-xs text-red-500 hover:bg-red-50 transition-colors"
+                >
+                  彻底删除
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
   )
 }

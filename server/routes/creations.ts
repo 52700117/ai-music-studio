@@ -190,7 +190,7 @@ router.get('/:id', requireUser, async (req: Request, res: Response): Promise<voi
   const userId = (req as any).user.id
   const id = Number(req.params.id)
   const result = await db.execute({
-    sql: 'SELECT * FROM creation WHERE id = ? AND user_id = ?',
+    sql: 'SELECT * FROM creation WHERE id = ? AND user_id = ? AND deleted_at IS NULL',
     args: [id, userId],
   })
   const row = result.rows[0] as any
@@ -317,7 +317,7 @@ router.post('/:id/share', requireUser, async (req: Request, res: Response): Prom
   const userId = (req as any).user.id
   const id = Number(req.params.id)
   const result = await db.execute({
-    sql: 'SELECT * FROM creation WHERE id = ? AND user_id = ?',
+    sql: 'SELECT * FROM creation WHERE id = ? AND user_id = ? AND deleted_at IS NULL',
     args: [id, userId],
   })
   const row = result.rows[0] as any
@@ -358,33 +358,117 @@ router.post('/:id/share', requireUser, async (req: Request, res: Response): Prom
  * 删除自己的创作
  * DELETE /api/creations/:id
  */
+/**
+ * 删除 = 软删除（进入回收站，30天内可恢复）
+ * DELETE /api/creations/:id
+ */
 router.delete('/:id', requireUser, async (req: Request, res: Response): Promise<void> => {
   await ensureInitialized()
   const userId = (req as any).user.id
   const id = Number(req.params.id)
-  if (!id || Number.isNaN(id)) {
-    res.status(400).json({ success: false, error: '无效的作品 ID' })
-    return
-  }
+  if (!id || Number.isNaN(id)) { res.status(400).json({ success: false, error: '无效的作品 ID' }); return }
+
   const existing = await db.execute({
-    sql: 'SELECT id, audio_url FROM creation WHERE id = ? AND user_id = ?',
+    sql: 'SELECT id FROM creation WHERE id = ? AND user_id = ? AND deleted_at IS NULL',
     args: [id, userId],
   })
-  if (existing.rows.length === 0) {
-    res.status(404).json({ success: false, error: '作品不存在' })
-    return
-  }
-  const row = existing.rows[0] as any
+  if (existing.rows.length === 0) { res.status(404).json({ success: false, error: '作品不存在' }); return }
+
+  // 软删除 + 移除广场上架
+  await db.execute({
+    sql: "UPDATE creation SET deleted_at = datetime('now') WHERE id = ? AND user_id = ?",
+    args: [id, userId],
+  })
   await db.execute({ sql: 'DELETE FROM plaza_song WHERE creation_id = ?', args: [id] })
-  await db.execute({ sql: 'DELETE FROM creation WHERE id = ? AND user_id = ?', args: [id, userId] })
-  if (row.audio_url && row.audio_url.startsWith('/audio/')) {
-    try {
+
+  // 尝试清理本地音频文件（节省空间，但保留 DB 记录用于恢复）
+  try {
+    const check = await db.execute({ sql: 'SELECT audio_url FROM creation WHERE id = ?', args: [id] })
+    const row = check.rows[0] as any
+    if (row?.audio_url && row.audio_url.startsWith('/audio/')) {
       const fs = await import('fs')
       const fp = await import('path')
       const abs = fp.join(process.cwd(), 'server', row.audio_url)
       if (fs.existsSync(abs)) fs.unlinkSync(abs)
-    } catch { /* noop */ }
+    }
+  } catch { /* noop */ }
+
+  res.json({ success: true })
+})
+
+/**
+ * 回收站列表（已软删除的）
+ * GET /api/creations/mine/trash
+ */
+router.get('/mine/trash', requireUser, async (req: Request, res: Response): Promise<void> => {
+  await ensureInitialized()
+  const userId = (req as any).user.id
+
+  const r = await db.execute({
+    sql: `SELECT id, mode, prompt, voice, audio_name, audio_url, status, created_at, deleted_at
+          FROM creation WHERE user_id = ? AND deleted_at IS NOT NULL
+          ORDER BY deleted_at DESC`,
+    args: [userId],
+  })
+
+  const list = r.rows.map((row: any) => ({
+    id: row.id,
+    mode: row.mode,
+    prompt: row.prompt,
+    voice: row.voice,
+    title: row.audio_name || row.prompt?.slice(0, 30) || '未命名作品',
+    status: row.status,
+    audioUrl: row.audio_url || null,
+    createdAt: row.created_at,
+    deletedAt: row.deleted_at,
+  }))
+
+  res.json({ success: true, list, retentionDays: 30 })
+})
+
+/**
+ * 恢复回收站的作品
+ * POST /api/creations/:id/restore
+ */
+router.post('/:id/restore', requireUser, async (req: Request, res: Response): Promise<void> => {
+  await ensureInitialized()
+  const userId = (req as any).user.id
+  const id = Number(req.params.id)
+  if (!id || Number.isNaN(id)) { res.status(400).json({ success: false, error: '无效的作品 ID' }); return }
+
+  const existing = await db.execute({
+    sql: "SELECT id, deleted_at FROM creation WHERE id = ? AND user_id = ? AND deleted_at IS NOT NULL",
+    args: [id, userId],
+  })
+  if (existing.rows.length === 0) { res.status(404).json({ success: false, error: '回收站里没有这个作品' }); return }
+
+  const delAt = (existing.rows[0] as any).deleted_at
+  // 超过 30 天不允许恢复
+  const cutoff = new Date(Date.now() - 30 * 86400 * 1000).toISOString()
+  if (delAt < cutoff) {
+    res.status(410).json({ success: false, error: '已超过 30 天，无法恢复' })
+    return
   }
+
+  await db.execute({
+    sql: 'UPDATE creation SET deleted_at = NULL WHERE id = ? AND user_id = ?',
+    args: [id, userId],
+  })
+  res.json({ success: true })
+})
+
+/**
+ * 彻底删除（从回收站永久移除）
+ * DELETE /api/creations/:id/purge
+ */
+router.delete('/:id/purge', requireUser, async (req: Request, res: Response): Promise<void> => {
+  await ensureInitialized()
+  const userId = (req as any).user.id
+  const id = Number(req.params.id)
+  if (!id || Number.isNaN(id)) { res.status(400).json({ success: false, error: '无效的作品 ID' }); return }
+
+  await db.execute({ sql: 'DELETE FROM creation WHERE id = ? AND user_id = ?', args: [id, userId] })
+  await db.execute({ sql: 'DELETE FROM plaza_song WHERE creation_id = ?', args: [id] })
   res.json({ success: true })
 })
 

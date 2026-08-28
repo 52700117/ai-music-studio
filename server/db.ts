@@ -174,6 +174,7 @@ export async function ensureInitialized(): Promise<void> {
   await runMigrations()
   await ensureColumn('user', 'paused', 'INTEGER DEFAULT 0')
   await ensureColumn('creation', 'audio_url', 'TEXT')
+  await ensureColumn('creation', 'deleted_at', 'TEXT')
   // 用户名密码登录
   await ensureColumn('user', 'username', 'TEXT')
   await ensureColumn('user', 'password_hash', 'TEXT')
