@@ -181,7 +181,7 @@ export default function Profile() {
 
       <div className="px-10 py-8">
         {/* 标签 + 右侧功能按钮 */}
-        <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
+        <div className="flex items-center mb-6 flex-wrap gap-6">
           {/* 三个标签页 */}
           <div className="inline-flex gap-1">
             {([
