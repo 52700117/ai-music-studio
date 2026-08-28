@@ -23,7 +23,6 @@ const MODE_LABEL: Record<string, string> = {
 const GENDER_LABEL: Record<string, string> = {
   male: '男',
   female: '女',
-  other: '其他',
 }
 
 type TabKey = 'works' | 'history' | 'info'
