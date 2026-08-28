@@ -575,7 +575,6 @@ function PersonalInfo({ user, onUpdate }: { user: any; onUpdate: () => Promise<v
             {[
               { v: 'male', label: '男' },
               { v: 'female', label: '女' },
-              { v: 'other', label: '其他' },
             ].map(({ v, label }) => (
               <button
                 key={v}

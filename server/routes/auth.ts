@@ -294,7 +294,7 @@ router.patch('/me', async (req, res): Promise<void> => {
   }
   if (body.gender !== undefined) {
     const g = body.gender
-    if (g && !['male', 'female', 'other'].includes(g)) {
+    if (g && !['male', 'female'].includes(g)) {
       res.status(400).json({ success: false, error: '性别值无效' })
       return
     }
