@@ -178,6 +178,10 @@ export async function ensureInitialized(): Promise<void> {
   await ensureColumn('user', 'username', 'TEXT')
   await ensureColumn('user', 'password_hash', 'TEXT')
   await ensureColumn('user', 'password_updated_at', 'TEXT')
+  // 个人信息扩展字段
+  await ensureColumn('user', 'bio', 'TEXT')
+  await ensureColumn('user', 'gender', 'TEXT')
+  await ensureColumn('user', 'avatar', 'TEXT')
   try {
     await db.execute(`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_username ON user(username) WHERE username IS NOT NULL`)
   } catch {

@@ -138,6 +138,9 @@ export interface UserInfo {
   phoneMasked?: string
   wechatMasked?: string
   loginType: string
+  bio?: string
+  gender?: string
+  avatar?: string
 }
 export interface Creation {
   id: number
@@ -180,6 +183,15 @@ export const api = {
     }),
 
   me: () => request<{ success: boolean; user: UserInfo }>('/api/auth/me'),
+
+  updateProfile: (body: { nickname?: string; bio?: string; gender?: string; avatar?: string }) =>
+    request<{ success: boolean; user: UserInfo }>('/api/auth/me', { method: 'PATCH', body }),
+
+  changeUserPassword: (oldPassword: string, newPassword: string) =>
+    request<{ success: boolean }>('/api/auth/change-password', {
+      method: 'POST',
+      body: { oldPassword, newPassword },
+    }),
 
   createCreation: (body: {
     mode: string

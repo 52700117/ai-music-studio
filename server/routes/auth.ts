@@ -248,8 +248,152 @@ router.get('/me', async (req, res): Promise<void> => {
       phoneMasked: user.phone_masked,
       wechatMasked: user.wechat_nickname,
       loginType: user.login_type,
+      // 扩展字段
+      bio: user.bio || '',
+      gender: user.gender || '',
+      avatar: user.avatar || '',
     },
   })
+})
+
+/**
+ * 更新个人资料（昵称、简介、性别、头像）
+ */
+router.patch('/me', async (req, res): Promise<void> => {
+  const auth = req.headers.authorization?.replace('Bearer ', '')
+  const payload = verifyToken(auth)
+  if (!payload || payload.role !== 'user') {
+    res.status(401).json({ success: false, error: '未登录' })
+    return
+  }
+  await ensureInitialized()
+
+  const body = (req.body || {}) as {
+    nickname?: string
+    bio?: string
+    gender?: string
+    avatar?: string
+  }
+
+  const updates: string[] = []
+  const args: any[] = []
+
+  if (body.nickname !== undefined) {
+    const nick = body.nickname.trim().slice(0, 30)
+    if (!nick) {
+      res.status(400).json({ success: false, error: '昵称不能为空' })
+      return
+    }
+    updates.push('nickname = ?')
+    args.push(nick)
+  }
+  if (body.bio !== undefined) {
+    updates.push('bio = ?')
+    args.push(body.bio.trim().slice(0, 200))
+  }
+  if (body.gender !== undefined) {
+    const g = body.gender
+    if (g && !['male', 'female', 'other'].includes(g)) {
+      res.status(400).json({ success: false, error: '性别值无效' })
+      return
+    }
+    updates.push('gender = ?')
+    args.push(g || null)
+  }
+  if (body.avatar !== undefined) {
+    // 简单验证：非空字符串或空
+    if (body.avatar && body.avatar.length > 2000) {
+      res.status(400).json({ success: false, error: '头像数据过长' })
+      return
+    }
+    updates.push('avatar = ?')
+    args.push(body.avatar || null)
+  }
+
+  if (updates.length === 0) {
+    res.status(400).json({ success: false, error: '没有要更新的内容' })
+    return
+  }
+
+  args.push(payload.id)
+  await db.execute({
+    sql: `UPDATE user SET ${updates.join(', ')} WHERE id = ?`,
+    args,
+  })
+
+  // 返回更新后的用户信息
+  const result = await db.execute({
+    sql: 'SELECT * FROM user WHERE id = ?',
+    args: [payload.id],
+  })
+  const user = result.rows[0] as any
+  res.json({
+    success: true,
+    user: {
+      id: user.id,
+      nickname: user.nickname,
+      username: user.username,
+      phoneMasked: user.phone_masked,
+      wechatMasked: user.wechat_nickname,
+      loginType: user.login_type,
+      bio: user.bio || '',
+      gender: user.gender || '',
+      avatar: user.avatar || '',
+    },
+  })
+})
+
+/**
+ * 修改密码（需验证旧密码）
+ */
+router.post('/change-password', async (req, res): Promise<void> => {
+  const auth = req.headers.authorization?.replace('Bearer ', '')
+  const payload = verifyToken(auth)
+  if (!payload || payload.role !== 'user') {
+    res.status(401).json({ success: false, error: '未登录' })
+    return
+  }
+  await ensureInitialized()
+
+  const { oldPassword, newPassword } = (req.body || {}) as {
+    oldPassword?: string
+    newPassword?: string
+  }
+
+  if (!oldPassword) {
+    res.status(400).json({ success: false, error: '请输入旧密码' })
+    return
+  }
+  if (!newPassword || !isValidPassword(newPassword)) {
+    res.status(400).json({ success: false, error: '新密码需 6-64 位，至少包含字母和数字' })
+    return
+  }
+  if (oldPassword === newPassword) {
+    res.status(400).json({ success: false, error: '新密码不能与旧密码相同' })
+    return
+  }
+
+  const result = await db.execute({
+    sql: 'SELECT * FROM user WHERE id = ?',
+    args: [payload.id],
+  })
+  const user = result.rows[0] as any
+  if (!user || !user.password_hash) {
+    res.status(400).json({ success: false, error: '该账号没有密码，请用其他方式登录' })
+    return
+  }
+  if (!verifyPassword(oldPassword, user.password_hash)) {
+    res.status(400).json({ success: false, error: '旧密码不正确' })
+    return
+  }
+
+  const newHash = hashPassword(newPassword)
+  await db.execute({
+    sql: 'UPDATE user SET password_hash = ?, password_updated_at = datetime(\'now\') WHERE id = ?',
+    args: [newHash, payload.id],
+  })
+
+  res.json({ success: true })
 })
 
 export default router
