@@ -152,6 +152,18 @@ if (fs.existsSync(VOLUME_AUDIO_DIR)) {
 }
 
 /**
+ * 用户协议 / 隐私政策（静态页面，供小程序/应用市场审核用）
+ * 放在 SPA 回退前，避免被 `app.get('*')` 吞掉
+ */
+const PUBLIC_DIR = IS_PKG
+  ? path.join(BASE_DIR, 'public')
+  : path.resolve(__dirname, '../public')
+app.get('/terms', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'terms.html')))
+app.get('/privacy', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'privacy.html')))
+app.get('/用户协议', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'terms.html')))
+app.get('/隐私政策', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'privacy.html')))
+
+/**
  * 普通用户路由（鉴权在各 route 内）
  */
 app.use('/api/auth', authRoutes)

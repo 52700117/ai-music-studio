@@ -6,7 +6,7 @@ import { Router, type Request, type Response } from 'express'
 import { db, ensureInitialized } from '../db.js'
 import { encrypt, maskPhone, maskNickname, hashPassword, verifyPassword } from '../lib/crypto.js'
 import { createToken, verifyToken } from '../lib/auth.js'
-import { sendSmsCode, isSmsEnabled } from '../lib/tencentSms.js'
+import { sendSmsCode, isSmsEnabled } from '../lib/sms.js'
 
 const router = Router()
 
