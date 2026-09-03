@@ -24,10 +24,16 @@ const EXEC_DIR = path.dirname(process.execPath)
 const SOURCE_ROOT = path.resolve(__dirname, '..')
 const BASE_DIR = IS_PKG ? path.join(EXEC_DIR, 'resources') : SOURCE_ROOT
 
-// Railway 持久化卷挂载在 /data；本地用 BASE_DIR/data
-const DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH
-  ? '/data'
-  : path.join(BASE_DIR, 'data')
+// 持久化数据目录：
+//   - Railway: RAILWAY_VOLUME_MOUNT_PATH（通常为 /data）
+//   - Render:  RENDER_DISK_PATH（或手动配置 DATA_VOLUME_MOUNT_PATH，通常为 /var/data）
+//   - 本地/其他: BASE_DIR/data
+function resolveDataDir(): string {
+  const override = process.env.DATA_VOLUME_MOUNT_PATH || process.env.RAILWAY_VOLUME_MOUNT_PATH || process.env.RENDER_DISK_PATH
+  if (override) return override
+  return path.join(BASE_DIR, 'data')
+}
+const DATA_DIR = resolveDataDir()
 const LOCAL_DB_PATH = path.resolve(DATA_DIR, 'app.db')
 // migrations 路径：pkg 打包版取 BASE_DIR/server/migrations；源码版取 __dirname/migrations
 const MIGRATION_PATH = IS_PKG

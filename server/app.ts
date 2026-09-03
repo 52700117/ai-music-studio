@@ -136,18 +136,21 @@ app.get('/api/version', (_req: Request, res: Response): void => {
  * 静态音频文件服务
  * - 本地开发 / 源码运行：项目内 public/audio
  * - Railway 生产：Railway Volume 挂载的 /data/audio（MusicGen 生成的音频存这里）
+ * - Render 生产：DATA_VOLUME_MOUNT_PATH/audio（Render Persistent Disk）
  * - pkg 打包版：BASE_DIR/data/audio（exe 同级 resources/data/audio）
  */
 const PUBLIC_AUDIO_DIR = IS_PKG
   ? path.join(BASE_DIR, 'public', 'audio')
   : path.resolve(__dirname, '../public/audio')
 app.use('/audio', express.static(PUBLIC_AUDIO_DIR, { maxAge: '7d' }))
-const VOLUME_AUDIO_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH
-  ? path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH, 'audio')
-  : IS_PKG
-  ? path.join(BASE_DIR, 'data', 'audio')
-  : path.resolve(__dirname, 'data/audio')
-if (fs.existsSync(VOLUME_AUDIO_DIR)) {
+function resolveVolumeDir(): string | null {
+  const mnt = process.env.DATA_VOLUME_MOUNT_PATH || process.env.RAILWAY_VOLUME_MOUNT_PATH || process.env.RENDER_DISK_PATH
+  if (mnt) return path.join(mnt, 'audio')
+  if (IS_PKG) return path.join(BASE_DIR, 'data', 'audio')
+  return path.resolve(__dirname, 'data/audio')
+}
+const VOLUME_AUDIO_DIR = resolveVolumeDir()
+if (VOLUME_AUDIO_DIR && fs.existsSync(VOLUME_AUDIO_DIR)) {
   app.use('/audio', express.static(VOLUME_AUDIO_DIR, { maxAge: '7d' }))
 }
 

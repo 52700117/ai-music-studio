@@ -1,0 +1,44 @@
+# Render Blueprint 配置
+# 使用方法：打开 https://dashboard.render.com/blueprints → 选择本仓库即可一键部署
+#
+# 如手动部署，请按以下参数配置：
+#   - Runtime: Node.js 20
+#   - Build Command: npm install && npm run build
+#   - Start Command: npm run start
+#   - Root Directory: ./
+#   - Persistent Disk: 挂载到 /var/data（1GB 起）
+#   - Environment Variable: DATA_VOLUME_MOUNT_PATH=/var/data
+
+services:
+  - type: web
+    name: ai-music-studio
+    runtime: node
+    plan: free # 可按需改为 starter / standard
+    branch: main
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    rootDir: ./
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: DATA_VOLUME_MOUNT_PATH
+        value: "/var/data"
+      # ============================================
+      # 以下为可选功能，需要时再填入（先留空，不填也能跑）
+      # ============================================
+      # MiniMax AI 音乐生成（不填会降级为浏览器本地 TTS 朗读）
+      # - key: MINIMAX_API_KEY
+      #   value: ""
+      # Spug 推送短信验证码（不填则开发模式，验证码固定 123456）
+      # - key: SPUG_SMS_TEMPLATE_ID
+      #   value: ""
+      # 管理员账号密码（不填则默认 admin / admin123，登录后请在后台修改）
+      # - key: ADMIN_USERNAME
+      #   value: "admin"
+      # - key: ADMIN_PASSWORD
+      #   value: ""
+    # 持久化磁盘：SQLite 数据库 + 音频文件存在这里，实例重启不会丢
+    disks:
+      - name: ai-music-data
+        mountPath: /var/data
+        sizeGB: 1
