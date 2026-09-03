@@ -34,6 +34,13 @@
   </head>
   <body>
     <div id="root"></div>
+    <!--
+      CloudBase 静态站独立部署时注入 API 地址：
+        部署前把下面 __API_BASE__ 改成云函数的 HTTP 访问地址
+        例：window.__API_BASE__ = 'https://你的环境ID.service.tcloudbase.com/api'
+      如果静态站和 API 同源（Vercel/Railway/源码运行），保持 null 即可（默认走同域 /api）
+    -->
+    <script>window.__API_BASE__ = null;</script>
     <script type="module" src="/src/main.tsx"></script>
     <!-- PWA 注册 Service Worker（手机安装后启动更快） -->
     <script>

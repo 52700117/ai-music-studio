@@ -53,3 +53,7 @@ release/*.log
 .cloudbase/
 dist-server/
 
+
+# CloudBase deployment outputs
+.cloudbase-out/
+cloudfunctions/*/node_modules/

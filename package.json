@@ -33,7 +33,7 @@
     "build": "tsc -b && vite build",
     "vercel-build": "vite build",
     "railway-build": "vite build",
-    "cloudbase-build": "npm ci --omit=dev --no-audit --no-fund && npx tsc -b && npx vite build && node scripts/cloudbase-pack.mjs",
+    "cloudbase-build": "npm run build && node scripts/cloudbase-deploy-pack.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "check": "tsc --noEmit",

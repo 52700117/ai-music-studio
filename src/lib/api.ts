@@ -4,6 +4,33 @@
 
 const TOKEN_KEY = 'sf_token'
 
+/**
+ * API 请求根地址：
+ *   - 本地/同域部署：window.__API_BASE__ = null 或未设置  →  走相对路径 /api/*
+ *   - 静态站 + 云函数分离部署：部署前在 index.html 里设置 window.__API_BASE__ = 'https://xxx.tcloudbase.com'
+ *   - 构建时注入：VITE_API_BASE 环境变量（比 index.html 注入优先级更高，方便 CI/CD 覆盖）
+ *   末尾带不带 / 都可以，下面会统一处理
+ */
+declare global {
+  interface Window { __API_BASE__?: string | null }
+}
+function resolveApiOrigin(): string {
+  let origin: string | null = null
+  try {
+    // 优先构建时注入的 env（Vite 会内联 import.meta.env.VITE_API_BASE）
+    const fromEnv = (import.meta as any).env?.VITE_API_BASE
+    if (fromEnv) origin = String(fromEnv)
+    // 其次运行时 window.__API_BASE__（index.html 注入，CloudBase 静态站改完 URL 不用重建）
+    else if (typeof window !== 'undefined' && window.__API_BASE__) origin = window.__API_BASE__
+  } catch { /* SSR 等场景忽略 */ }
+  if (!origin) return ''
+  origin = origin.trim().replace(/\/$/, '')
+  // 只写了域名没写 /api 后缀时自动补，避免忘记
+  if (!origin.endsWith('/api') && !origin.includes('/api/')) origin += '/api'
+  return origin
+}
+const API_ORIGIN = resolveApiOrigin()
+
 // ========================================================================
 // 严格模式：管理员 token 完全不落盘（不写 localStorage / sessionStorage / cookie）
 //   只存在下面这个模块级的内存变量里
@@ -79,7 +106,15 @@ interface ReqOpts {
 
 async function request<T>(path: string, opts: ReqOpts = {}): Promise<T> {
   const { method = 'GET', body, auth = 'user', query } = opts
-  let url = path
+  // 保证 path 以 / 开头（调用方一般是 '/api/xxx'）
+  const relPath = path.startsWith('/') ? path : '/' + path
+  // API_ORIGIN 是 '' 时 url = '/api/xxx'（相对同域）
+  // API_ORIGIN = 'https://xx/api' + path = '/api/creations' 时 → 拼接为 'https://xx/api/creations'
+  let url = API_ORIGIN
+    ? (relPath.startsWith('/api')
+        ? API_ORIGIN.replace(/\/api$/, '') + relPath
+        : API_ORIGIN + relPath)
+    : relPath
   if (query) {
     const qs = new URLSearchParams()
     Object.entries(query).forEach(([k, v]) => {

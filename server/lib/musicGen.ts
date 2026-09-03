@@ -21,10 +21,20 @@ const HF_BASE = 'https://api-inference.huggingface.co/models'
 // small 模型较快；medium 质量更好但慢。优先 small，超时/失败可切 medium。
 const DEFAULT_MODEL = process.env.MUSICGEN_MODEL || 'facebook/musicgen-small'
 
-// Railway Volume 路径（持久化），本地开发用项目目录
-const AUDIO_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH
-  ? '/data/audio'
-  : path.resolve(process.cwd(), 'data/audio')
+// 音频输出目录优先级：
+//   1. Railway/Render/自有 Volume：RAILWAY_VOLUME_MOUNT_PATH / DATA_VOLUME_MOUNT_PATH
+//   2. CloudBase 云函数：/tmp（512MB 临时可写，重启不保留，但生成后 base64 返回不依赖持久化）
+//   3. 本地源码：项目根 /data/audio
+function resolveAudioDir(): string {
+  const mount = process.env.DATA_VOLUME_MOUNT_PATH || process.env.RAILWAY_VOLUME_MOUNT_PATH || process.env.RENDER_DISK_PATH
+  if (mount) return path.join(mount, 'audio')
+  // CloudBase/SCF 云函数运行时特征：SCF_RUNTIME 或 TENCENTCLOUD_SECRETID 存在
+  if (process.env.SCF_RUNTIME || process.env._SCF_TIMESTAMP || process.env.TENCENTCLOUD_SECRETID) {
+    return '/tmp/ai-music-audio'
+  }
+  return path.resolve(process.cwd(), 'data/audio')
+}
+const AUDIO_DIR = resolveAudioDir()
 
 function getToken(): string | null {
   return process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN || null
