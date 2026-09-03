@@ -1,38 +1,39 @@
 /**
- * local server entry file, for local development / pkg bundle / NSIS installer
- *  - Listen on 0.0.0.0 (LAN accessible)
- *  - Auto find available port starting from 3001 (EADDRINUSE -> try +1)
- *  - Write actual port to port.txt in BASE_DIR (so launcher/GUI can read it)
+ * 服务入口
+ *   - 本地开发 / pkg 打包 / Railway / Render ：直接 listen(port, '0.0.0.0')
+ *   - 腾讯云 CloudBase 云托管：读取 TCB_PORT（CloudRun 注入）绑定 127.0.0.1
  */
 import app from './app.js';
 import fs from 'fs';
 import path from 'path';
 
-// 0.0.0.0: support LAN access
-const HOST = '0.0.0.0';
-const START_PORT = Number(process.env.PORT) || 3001;
 const MAX_TRIES = 50;
+
+// CloudBase 云托管会注入 TCB_LISTEN_ADDR 或 PORT；本地默认 3001
+const ENV_PORT = Number(process.env.TCB_PORT || process.env.PORT || 3001);
+const HOST = process.env.TCB_LISTEN_ADDR || (process.env.CLOUDBASE_RUN_MODE ? '127.0.0.1' : '0.0.0.0');
+const IS_CLOUDBASE = !!process.env._SCF_TIMESTAMP || !!process.env.CLOUDBASE_ENV_ID || !!process.env.TCB_ENV || !!process.env.CLOUDBASE_RUN_MODE;
 
 function tryListen(port: number, tries: number): void {
   const server = (app as any).listen(port, HOST, () => {
     const local = `http://localhost:${port}`;
     console.log('');
     console.log('==========================================================');
-    console.log('   Music Studio is running!');
+    console.log(IS_CLOUDBASE ? '   Music Studio is running on CloudBase!' : '   Music Studio is running!');
     console.log('   Local access:    ' + local);
     console.log('   Admin panel:     ' + local + '/admin');
-    console.log('   LAN access:      http://<your-ip>:' + port);
+    if (!IS_CLOUDBASE) {
+      console.log('   LAN access:      http://<your-ip>:' + port);
+    }
     console.log('==========================================================');
     console.log('');
-    // Write port.txt so launcher/GUI can find us
-    try {
-      const baseDir = (app as any).BASE_DIR || process.cwd();
-      const portFile = path.join(baseDir, 'port.txt');
-      fs.writeFileSync(portFile, String(port), 'utf-8');
-      // Also write to cwd as fallback
-      try { fs.writeFileSync(path.join(process.cwd(), 'port.txt'), String(port), 'utf-8'); } catch {}
-    } catch (e) {
-      // silent — launcher will try 3001 first
+    if (!IS_CLOUDBASE) {
+      try {
+        const baseDir = (app as any).BASE_DIR || process.cwd();
+        const portFile = path.join(baseDir, 'port.txt');
+        fs.writeFileSync(portFile, String(port), 'utf-8');
+        try { fs.writeFileSync(path.join(process.cwd(), 'port.txt'), String(port), 'utf-8'); } catch {}
+      } catch { /* silent */ }
     }
   });
 
@@ -47,17 +48,10 @@ function tryListen(port: number, tries: number): void {
     process.exit(1);
   });
 
-  // Graceful shutdown
-  process.on('SIGTERM', () => {
-    console.log('SIGTERM signal received');
-    server.close(() => process.exit(0));
-  });
-  process.on('SIGINT', () => {
-    console.log('SIGINT signal received');
-    server.close(() => process.exit(0));
-  });
+  process.on('SIGTERM', () => { server.close(() => process.exit(0)); });
+  process.on('SIGINT',  () => { server.close(() => process.exit(0)); });
 }
 
-tryListen(START_PORT, MAX_TRIES);
+tryListen(ENV_PORT, MAX_TRIES);
 
 export default app;

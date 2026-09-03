@@ -1,0 +1,37 @@
+{
+  "envId": "{{envId}}",
+  "version": "2.0",
+  "$schema": "https://framework-1258016615.tcloudbaseapp.com/schema/latest.json",
+  "functionRoot": "cloudfunctions",
+  "functions": [],
+  "containers": {
+    "ai-music-studio": {
+      "name": "ai-music-studio",
+      "base": "nodejs:18",
+      "entry": "node dist-server/server.js",
+      "uploadType": "package",
+      "source": "./.cloudbase/publish",
+      "ports": [80],
+      "envParams": {
+        "DATA_VOLUME_MOUNT_PATH": "/data",
+        "MINIMAX_API_KEY": "{{MINIMAX_API_KEY}}",
+        "SPUG_SMS_TEMPLATE_ID": "{{SPUG_SMS_TEMPLATE_ID}}"
+      },
+      "volumeMounts": [
+        {
+          "name": "ai-music-data",
+          "mountPath": "/data"
+        }
+      ],
+      "accessType": "http",
+      "cpu": 0.25,
+      "mem": 0.5,
+      "policy": {
+        "replica": 1,
+        "isAutoScaling": true,
+        "maxReplicas": 1
+      }
+    }
+  },
+  "staticStorages": []
+}

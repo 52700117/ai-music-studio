@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "outDir": "./dist-server",
+    "rootDir": "./server",
+    "module": "ES2022",
+    "moduleResolution": "node",
+    "target": "ES2022",
+    "allowImportingTsExtensions": false,
+    "paths": {},
+    "types": ["node"],
+    "esModuleInterop": true,
+    "declaration": true,
+    "declarationMap": false,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.server.tsbuildinfo"
+  },
+  "include": ["server/**/*.ts"],
+  "exclude": ["node_modules", "dist", "dist-server", "src"]
+}

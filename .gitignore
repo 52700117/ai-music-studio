@@ -48,3 +48,8 @@ release/*.log
 
 # pkg 桌面版单文件 >100MB，不进 GitHub，用 Git LFS 或自行分发
 .pkg-stash/
+
+# CloudBase
+.cloudbase/
+dist-server/
+

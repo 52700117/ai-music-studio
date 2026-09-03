@@ -1,0 +1,23 @@
+# 腾讯云 CloudBase 云托管部署 Dockerfile
+# 腾讯云云托管支持两种：1) 自定义 Dockerfile  2) Node.js 镜像+启动命令
+# 为简化，同时兼容两种方式：用户可直接在后台选择「Node.js 18 + 启动命令 node dist-server/server/server.js」
+FROM node:18-alpine
+
+WORKDIR /app
+
+# 先复制依赖层，缓存更高效
+COPY package.json package-lock.json ./
+RUN npm install --omit=dev --no-audit --no-fund
+
+# 复制构建产物（由 scripts/cloudbase-pack.mjs 打包出来）
+COPY dist ./dist
+COPY dist-server ./dist-server
+COPY public ./public
+COPY server/migrations ./server/migrations
+COPY server/lib/migrations ./server/lib/migrations 2>/dev/null || true
+
+# 生产环境用 Node.js 直接运行编译后的 JS，不用 tsx
+ENV PORT=80
+EXPOSE 80
+
+CMD ["node", "dist-server/server.js"]
